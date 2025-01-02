@@ -209,7 +209,7 @@ local function onProcessCommand121()
   local state, err = pcall(function()
     local id = core.readInteger(COMMAND_CURRENT_ID_ADDRESS)
     local plan = core.readInteger(COMMAND_ACTION_PLAN_ADDRESS)
-    print("Custom command #" .. tostring(id) .. " called with plan: " .. tostring(PlanNames[plan]))
+    log(DEBUG, "Custom immediate protocol #" .. tostring(id) .. " called with plan: " .. tostring(PlanNames[plan]))
 
     -- IMMEDIATE command specific code:
     setCommandTime(id, 0) -- set to 0 so execution is immediate after queueing
@@ -277,33 +277,41 @@ local function onProcessCommand122()
   local state, err = pcall(function()
     local id = core.readInteger(COMMAND_CURRENT_ID_ADDRESS)
     local plan = core.readInteger(COMMAND_ACTION_PLAN_ADDRESS)
-    print("Custom command #" .. tostring(id) .. " called with plan: " .. tostring(PlanNames[plan]))
+    log(DEBUG, "Custom lockstep protocol #" .. tostring(id) .. " called with plan: " .. tostring(PlanNames[plan]))
 
+    log(DEBUG, "get command meta information")
     local meta = getCommandMetaInformation(id)
+
+    log(DEBUG, "create ParameterSerialisationHelper")
     local psh = ParameterSerialisationHelper:new({address = meta.parametersAddress, offsetAddress = COMMAND_PARAMETER_OFFSET_ADDRESS})
+
+    log(VERBOSE, string.format("offset address: %X", psh.offsetAddress))
 
     local subCommand = nil
     if plan == PlanEnum.SCHEDULE_FOR_SEND then
+      log(DEBUG, string.format("read integer from: %X", COMMAND_PARAM_0_ADDRESS))
       -- Player did a queueCommand, read the information in this parameter to get the sub protocol information
       subCommand = core.readInteger(COMMAND_PARAM_0_ADDRESS)
       ParameterSerialisationHelper:serializeInteger(subCommand)
       psh = ParameterSerialisationHelper
     elseif plan == PlanEnum.EXECUTE then
+      log(DEBUG, "deserialize integer from parameters")
       subCommand = ParameterSerialisationHelper:deserializeInteger()
       psh = ParameterSerialisationHelper
     elseif plan == PlanEnum.SCHEDULE_AFTER_RECEIVE then
+      log(DEBUG, "deserialize integer from parameters")
       subCommand = ParameterSerialisationHelper:deserializeInteger()
       psh = ParameterSerialisationHelper
     end
 
-    print("Subcommand: " .. tostring(subCommand))
+    log(DEBUG, "Subcommand: " .. tostring(subCommand))
 
     local prot = PROTOCOL_REGISTRY[subCommand]
     if prot == nil then
       error("Unknown protocol: " .. tostring(subCommand))
     end
 
-    log(1, "Following protocol: " .. prot.name .. " as defined by extension: " .. prot.extension)
+    log(DEBUG, "Following protocol: " .. prot.name .. " as defined by extension: " .. prot.extension)
 
     setCommandParameterSize(4 + prot.parameterSize) -- at least 4 to house the sub protocol as a parameter
 
@@ -322,14 +330,17 @@ local function onProcessCommand122()
       error("No callback for plan: " .. tostring(PlanNames[plan]))
     end
 
+    log(DEBUG, "Executing callback for plan: " .. tostring(PlanNames[plan]))
     local state, result = pcall(cb, prot.handler, meta)
     if not state then
       error("Error occurred when executing handler for: " .. tostring(subCommand) .. ". Message: " .. tostring(result))
     end
 
+    log(DEBUG, "Callback succesful for plan: " .. tostring(PlanNames[plan]))
+
   end)
   
-  if not state then log(WARNING, err) end
+  if not state then log(WARNING, string.format("custom protocol failed to execute: \n%s", err)) end
 end
 
 
@@ -591,9 +602,8 @@ end
 ---Arguments for the protocol are to be set up during the call to scheduleForSend
 ---@param self table reference to the module
 ---@param protocol number|string name or number of the protocol
----@param ... number|table a number or table with numbers acting as the parameters to the invocation
 ---@return nil
-function namespace.invokeCustomProtocol(self, protocol, ...)
+function namespace.invokeCustomProtocol(self, protocol)
   local protocolNumber = argToProtocolNumber(protocol)
 
   if protocolNumber < FIRST_AVAILABLE_NUMBER then
@@ -606,10 +616,10 @@ function namespace.invokeCustomProtocol(self, protocol, ...)
 
   if PROTOCOL_REGISTRY[protocolNumber].type == "IMMEDIATE" then
     core.writeInteger(COMMAND_PARAM_0_ADDRESS, protocolNumber)
-    self:invokeOriginalProtocol(CUSTOM_PROTOCOL_NUMBER1, ...)
+    self:invokeOriginalProtocol(CUSTOM_PROTOCOL_NUMBER1) -- todo, add arg protocolNumber
   elseif PROTOCOL_REGISTRY[protocolNumber].type == "LOCKSTEP" then
     core.writeInteger(COMMAND_PARAM_0_ADDRESS, protocolNumber)
-    self:invokeOriginalProtocol(CUSTOM_PROTOCOL_NUMBER2,...)
+    self:invokeOriginalProtocol(CUSTOM_PROTOCOL_NUMBER2) -- todo, add arg protocolNumber
   else
     error(string.format("unknown protocol type: %s", tostring(PROTOCOL_REGISTRY[protocolNumber].type)))
   end
@@ -619,7 +629,8 @@ end
 ---Invoke protocol
 ---@param self table reference to this module
 ---@param protocol number|string name or number of the protocol
----@param ... number|table a number or table with numbers acting as the parameters to the invocation
+---@param ... number|table a number or table with numbers acting as the parameters to the invocation.
+---Only supported for original protocols
 ---@return nil
 function namespace.invokeProtocol(self, protocol, ...)
   local protocolNumber = argToProtocolNumber(protocol)
@@ -633,7 +644,7 @@ function namespace.invokeProtocol(self, protocol, ...)
   end
 
   if protocolNumber >= FIRST_AVAILABLE_NUMBER then
-    return self:invokeCustomProtocol(protocolNumber, ...)
+    return self:invokeCustomProtocol(protocolNumber)
   end
 
   error(string.format("illegal protocol number: %s", protocolNumber))
