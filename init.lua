@@ -126,6 +126,11 @@ local PlanEnum = {
   ["SCHEDULE_AFTER_RECEIVE"] = 2,
 }
 
+---Note that a Handler that is handling a Lockstep protocol
+---can never invoke an Immediate protocol, because the
+---ID of the currently processed invocation will be messed up
+---causing an infinite loop as the Handler's invocation is called
+---repeatedly
 ---@class Handler
 ---@field public scheduleForSend fun(self, meta)
 ---@field public scheduleAfterReceive fun(self, meta)
@@ -158,6 +163,17 @@ local nextAvailableRegistrySlot = function()
     i = i + 1
   end
 end
+
+---@class InvocationLock
+---@field current Protocol currently executing protocol
+local InvocationLock = {}
+
+---Lock to lock what kind of invocation can be called
+---Lockstep protocols (game time) can never call immediate protocols
+---@type InvocationLock
+local INVOCATION_LOCK = {
+  current = nil,
+}
 
 local setCommandParameterSize = function(size) core.writeInteger(COMMAND_PARAMETER_SIZE_ADDRESS, size) end
 local getCommandParameterSize = function(size) core.readInteger(COMMAND_PARAMETER_SIZE_ADDRESS) end
@@ -209,12 +225,15 @@ local function onProcessCommand121()
   local state, err = pcall(function()
     local id = core.readInteger(COMMAND_CURRENT_ID_ADDRESS)
     local plan = core.readInteger(COMMAND_ACTION_PLAN_ADDRESS)
-    log(DEBUG, "Custom immediate protocol #" .. tostring(id) .. " called with plan: " .. tostring(PlanNames[plan]))
+    log(DEBUG, "custom immediate protocol invocation #" .. tostring(id) .. " called with plan: " .. tostring(PlanNames[plan]))
 
     -- IMMEDIATE command specific code:
     setCommandTime(id, 0) -- set to 0 so execution is immediate after queueing
 
     local meta = getCommandMetaInformation(id)
+
+    log(VERBOSE, string.format("scheduled for time: %s", meta.time))
+
     local psh = FixedParameterLocationSerializer
 
     local subCommand = nil
@@ -231,14 +250,15 @@ local function onProcessCommand121()
       psh = FixedReceivedParameterLocationSerializer
     end
 
-    print("Subcommand: " .. tostring(subCommand))
+    log(VERBOSE, "subcommand: " .. tostring(subCommand))
 
+    ---@type Protocol
     local prot = PROTOCOL_REGISTRY[subCommand]
     if prot == nil then
       error("Unknown protocol: " .. tostring(subCommand))
     end
 
-    log(1, "Following protocol: " .. prot.name .. " as defined by extension: " .. prot.extension)
+    log(DEBUG, "following protocol: " .. prot.name .. " as defined by extension: " .. prot.extension)
 
     setCommandParameterSize(4 + prot.parameterSize) -- at least 4 to house the sub protocol as a parameter
 
@@ -258,7 +278,9 @@ local function onProcessCommand121()
     end
 
     log(1, "Calling into handler: ")
+    INVOCATION_LOCK.current = prot
     local state, result = pcall(cb, prot.handler, meta)
+    INVOCATION_LOCK.current = nil
     if not state then
       error("Error occurred when executing handler for: " .. tostring(subCommand) .. ". Message: " .. tostring(result))
     end
@@ -277,10 +299,12 @@ local function onProcessCommand122()
   local state, err = pcall(function()
     local id = core.readInteger(COMMAND_CURRENT_ID_ADDRESS)
     local plan = core.readInteger(COMMAND_ACTION_PLAN_ADDRESS)
-    log(DEBUG, "Custom lockstep protocol #" .. tostring(id) .. " called with plan: " .. tostring(PlanNames[plan]))
+    log(DEBUG, "custom lockstep protocol invocation #" .. tostring(id) .. " called with plan: " .. tostring(PlanNames[plan]))
 
     log(DEBUG, "get command meta information")
     local meta = getCommandMetaInformation(id)
+
+    log(VERBOSE, string.format("scheduled for time: %s", meta.time))
 
     log(DEBUG, "create ParameterSerialisationHelper")
     local psh = ParameterSerialisationHelper:new({address = meta.parametersAddress, offsetAddress = COMMAND_PARAMETER_OFFSET_ADDRESS})
@@ -292,26 +316,26 @@ local function onProcessCommand122()
       log(DEBUG, string.format("read integer from: %X", COMMAND_PARAM_0_ADDRESS))
       -- Player did a queueCommand, read the information in this parameter to get the sub protocol information
       subCommand = core.readInteger(COMMAND_PARAM_0_ADDRESS)
-      ParameterSerialisationHelper:serializeInteger(subCommand)
-      psh = ParameterSerialisationHelper
+      psh:serializeInteger(subCommand)
+      -- psh = ParameterSerialisationHelper
     elseif plan == PlanEnum.EXECUTE then
       log(DEBUG, "deserialize integer from parameters")
-      subCommand = ParameterSerialisationHelper:deserializeInteger()
-      psh = ParameterSerialisationHelper
+      subCommand = psh:deserializeInteger()
+      -- psh = ParameterSerialisationHelper
     elseif plan == PlanEnum.SCHEDULE_AFTER_RECEIVE then
       log(DEBUG, "deserialize integer from parameters")
-      subCommand = ParameterSerialisationHelper:deserializeInteger()
-      psh = ParameterSerialisationHelper
+      subCommand = psh:deserializeInteger()
+      -- psh = ParameterSerialisationHelper
     end
 
-    log(DEBUG, "Subcommand: " .. tostring(subCommand))
+    log(DEBUG, "subcommand: " .. tostring(subCommand))
 
     local prot = PROTOCOL_REGISTRY[subCommand]
     if prot == nil then
       error("Unknown protocol: " .. tostring(subCommand))
     end
 
-    log(DEBUG, "Following protocol: " .. prot.name .. " as defined by extension: " .. prot.extension)
+    log(DEBUG, "following protocol: " .. prot.name .. " as defined by extension: " .. prot.extension)
 
     setCommandParameterSize(4 + prot.parameterSize) -- at least 4 to house the sub protocol as a parameter
 
@@ -330,13 +354,15 @@ local function onProcessCommand122()
       error("No callback for plan: " .. tostring(PlanNames[plan]))
     end
 
-    log(DEBUG, "Executing callback for plan: " .. tostring(PlanNames[plan]))
+    log(DEBUG, "executing callback for plan: " .. tostring(PlanNames[plan]))
+    INVOCATION_LOCK.current = prot
     local state, result = pcall(cb, prot.handler, meta)
+    INVOCATION_LOCK.current = nil
     if not state then
       error("Error occurred when executing handler for: " .. tostring(subCommand) .. ". Message: " .. tostring(result))
     end
 
-    log(DEBUG, "Callback succesful for plan: " .. tostring(PlanNames[plan]))
+    log(DEBUG, "callback succesful for plan: " .. tostring(PlanNames[plan]))
 
   end)
   
@@ -357,14 +383,38 @@ local namespace = {
     log(DEBUG, string.format("Landing locations: EAX: 0x%X; ECX: 0x%X; EDX: 0x%X", onProcessCommand_landingLocation_EAX, onProcessCommand_landingLocation_ECX, onProcessCommand_landingLocation_EDX))
     
     -- call onProcessCommand and set the command type to 0 because custom command type (121) does not exist. 0 is a dummy
-    core.detourCode(function(registers) registers.EAX = 0; onProcessCommand121(); return registers end, onProcessCommand_landingLocation_EAX + 5, 5)
-    core.detourCode(function(registers) registers.ECX = 0; onProcessCommand121(); return registers end, onProcessCommand_landingLocation_ECX + 5, 5)
-    core.detourCode(function(registers) registers.EDX = 0; onProcessCommand121(); return registers end, onProcessCommand_landingLocation_EDX + 5, 5)
+    core.detourCode(function(registers) 
+        registers.EAX = 0
+        onProcessCommand121()
+        return registers 
+      end, onProcessCommand_landingLocation_EAX + 5, 5)
+    core.detourCode(function(registers) 
+        registers.ECX = 0
+        onProcessCommand121()
+        return registers 
+      end, onProcessCommand_landingLocation_ECX + 5, 5)
+    core.detourCode(function(registers) 
+        registers.EDX = 0
+        onProcessCommand121()
+        return registers
+      end, onProcessCommand_landingLocation_EDX + 5, 5)
     
     -- Untested
-    core.detourCode(function(registers) registers.EAX = 0; onProcessCommand122(); return registers end, onProcessCommand_landingLocation_EAX + 5 + 5 + 5 + 2, 5)
-    core.detourCode(function(registers) registers.ECX = 0; onProcessCommand122(); return registers end, onProcessCommand_landingLocation_ECX + 5 + 5 + 5 + 2, 5)
-    core.detourCode(function(registers) registers.EDX = 0; onProcessCommand122(); return registers end, onProcessCommand_landingLocation_EDX + 5 + 5 + 5 + 2, 5)
+    core.detourCode(function(registers) 
+        registers.EAX = 0
+        onProcessCommand122()
+        return registers
+      end, onProcessCommand_landingLocation_EAX + 5 + 5 + 5 + 2, 5)
+    core.detourCode(function(registers) 
+        registers.ECX = 0
+        onProcessCommand122()
+        return registers
+      end, onProcessCommand_landingLocation_ECX + 5 + 5 + 5 + 2, 5)
+    core.detourCode(function(registers)
+        registers.EDX = 0
+        onProcessCommand122()
+        return registers 
+      end, onProcessCommand_landingLocation_EDX + 5 + 5 + 5 + 2, 5)
     
 
     core.insertCode(
@@ -415,6 +465,8 @@ local namespace = {
     "after"
     )
 
+
+    require("tests")
   end,
   disable = function(self, config)
   end,
@@ -455,6 +507,10 @@ function namespace.registerCustomProtocol(self, extension, name, type, parameter
   for reservedNumber, protocolName in pairs(KNOWN_REGISTRY_ENTRIES) do
     if protocolName == key then
       number = reservedNumber
+
+      if PROTOCOL_REGISTRY[number] ~= nil then
+        error(string.format("protocol already registered: %s", key))
+      end
     end
   end
 
@@ -582,6 +638,43 @@ local function setupInvocationParameters(...)
 
 end
 
+local knownProtocolTypes = require("knownProtocolTypes")
+---Only IMMEDIATE => IMMEDIATE works because there is a specific clause in the code
+---that immediately clears the command if time == 0 (IMMEDIATE).
+---All other combinations go through the processWaitingCommands which causes issues
+---as the one waiting in the array is never put to processed.
+local function checkIllegalInvocationNesting(protocol)
+  local l = INVOCATION_LOCK.current
+
+  log(VERBOSE, string.format("checkIllegalInvocationNesting: checking active invocation type"))
+
+  if l ~= nil then
+    log(VERBOSE, string.format("checkIllegalInvocationNesting: checking active invocation type: %s", l.type))
+    -- We are currently executing/scheduling a protocol already, does this new invocation conflict?
+    if l.type == "LOCKSTEP" then
+      error(string.format("A %s protocol can never invoke another protocol: %s",  l.type, protocol))
+    elseif l.type == "IMMEDIATE" then
+      local kpt = knownProtocolTypes[protocol]
+      if kpt ~= nil then
+        log(VERBOSE, string.format("checkIllegalInvocationNesting: checking active invocation type: %s against %s", l.type, kpt))
+        if kpt == "LOCKSTEP" then
+          error(string.format("A %s protocol can never invoke an %s protocol (%s)",  l.type, kpt, protocol))
+        end
+      else
+        local pr = PROTOCOL_REGISTRY[protocol]
+        if pr ~= nil then
+          log(VERBOSE, string.format("checkIllegalInvocationNesting: checking active invocation type: %s against %s", l.type, pr))
+          if pr.type == "LOCKSTEP" then
+            error(string.format("A %s protocol can never invoke an %s protocol (%s)", l.type, pr, protocol))
+          end
+        else
+          log(WARNING, string.format("checkIllegalInvocationNesting: cannot check, unknown protocol type: %s", protocol))
+        end
+      end
+    end
+  end
+end
+
 ---Invoke original protocol
 ---@param self table reference to this module
 ---@param protocol number protocol number
@@ -591,6 +684,8 @@ function namespace.invokeOriginalProtocol(self, protocol, ...)
   if protocol < 0 or protocol > CUSTOM_PROTOCOL_NUMBER2 then
     error("Illegal protocol number: " .. tostring(protocol))
   end
+
+  checkIllegalInvocationNesting(protocol)
 
   setupInvocationParameters(...)
   _queueCommand(MULTIPLAYER_HANDLER_ADDRESS, protocol)
@@ -614,6 +709,8 @@ function namespace.invokeCustomProtocol(self, protocol)
     error("Unknown custom protocol: " .. tostring(protocolNumber)) 
   end
 
+  checkIllegalInvocationNesting(protocolNumber)
+
   if PROTOCOL_REGISTRY[protocolNumber].type == "IMMEDIATE" then
     core.writeInteger(COMMAND_PARAM_0_ADDRESS, protocolNumber)
     self:invokeOriginalProtocol(CUSTOM_PROTOCOL_NUMBER1) -- todo, add arg protocolNumber
@@ -626,7 +723,7 @@ function namespace.invokeCustomProtocol(self, protocol)
 end
 
 
----Invoke protocol
+---Invoke protocol by number or key
 ---@param self table reference to this module
 ---@param protocol number|string name or number of the protocol
 ---@param ... number|table a number or table with numbers acting as the parameters to the invocation.
@@ -638,6 +735,8 @@ function namespace.invokeProtocol(self, protocol, ...)
   if protocolNumber < 1 then
     error(string.format("invalid protocol number: %s", protocolNumber))    
   end
+
+  log(DEBUG, string.format("invokeProtocol(%s)", protocolNumber))
 
   if protocolNumber <= LAST_ORIGINAL_NUMBER then
     return self:invokeOriginalProtocol(protocolNumber, ...)
