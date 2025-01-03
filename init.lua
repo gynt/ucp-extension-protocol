@@ -1,4 +1,6 @@
 
+local globals = require("globals")
+
 -- commandCategory of the current command is in EDX
 -- preserve EDX
 -- make sure the replaced code is reinserted after the hook code
@@ -38,11 +40,7 @@ local queueCommandHook2Size = 7
 -- Crusader Extreme commands are longer I believe
 local TOTAL_GAME_COMMAND_SIZE = 1272
 
--- byte value, max is 127. 125 and 126 are already taken. Not sure about 121.
-local LAST_ORIGINAL_NUMBER = 120 -- Actually 120 is illegal value
-local CUSTOM_PROTOCOL_NUMBER1 = LAST_ORIGINAL_NUMBER + 1
-local CUSTOM_PROTOCOL_NUMBER2 = CUSTOM_PROTOCOL_NUMBER1 + 1
-local FIRST_AVAILABLE_NUMBER = CUSTOM_PROTOCOL_NUMBER2 + 1 + 7 -- reserve an extra 7 for internal use
+
 
 -- ECX value for most multiplayer functionality (command functionality)
 local MULTIPLAYER_HANDLER_ADDRESS = core.readInteger(core.AOBScan("B9 ? ? ? ? E8 ? ? ? ? 39 ? ? ? ? ? 75 17") + 1)
@@ -94,11 +92,11 @@ local function codeGenerator(register)
   end
 
   return {
-    0x83, registerAssembly, CUSTOM_PROTOCOL_NUMBER1, 
+    0x83, registerAssembly, globals.CUSTOM_PROTOCOL_NUMBER1, 
     0x75, 0x07, 
     0x90, 0x90, 0x90, 0x90, 0x90,
     0xEB, 0x0A, 
-    0x83, registerAssembly, CUSTOM_PROTOCOL_NUMBER2, 
+    0x83, registerAssembly, globals.CUSTOM_PROTOCOL_NUMBER2, 
     0x75, 0x05, 
     0x90, 0x90, 0x90, 0x90, 0x90,
     0xC3 
@@ -113,67 +111,6 @@ local _queueCommand = core.exposeCode(_queueCommandAddress, 2, 1)
 
 
 local _scheduleCommand = core.exposeCode(core.AOBScan("56 8B F1 81 ? ? ? ? ? ? ? ? ?"), 5, 1)
-
-local PlanNames = {
-  [0] = "EXECUTE", -- executing the command (deserialize + execute)
-  [1] = "SCHEDULE_FOR_SEND", -- sending your own command (serialize + place in command queue)
-  [2] = "SCHEDULE_AFTER_RECEIVE", -- receiving command from another machine/player (prep steps for execution (never used by the game actually))
-}
-
-local PlanEnum = {
-  ["EXECUTE"] = 0,
-  ["SCHEDULE_FOR_SEND"] = 1,
-  ["SCHEDULE_AFTER_RECEIVE"] = 2,
-}
-
----Note that a Handler that is handling a Lockstep protocol
----can never invoke an Immediate protocol, because the
----ID of the currently processed invocation will be messed up
----causing an infinite loop as the Handler's invocation is called
----repeatedly
----@class Handler
----@field public scheduleForSend fun(self, meta)
----@field public scheduleAfterReceive fun(self, meta)
----@field public execute fun(self, meta)
-local Handler = {}
-
----@class Protocol
----@field public extension string
----@field public name string
----@field public type string
----@field public parameterSize number
----@field public handler Handler
-local Protocol = {}
-
----@type table<number, Protocol>
-local PROTOCOL_REGISTRY = {}
-
----@type table<number, string>
-local KNOWN_REGISTRY_ENTRIES = {
-  [FIRST_AVAILABLE_NUMBER] = "config-similarity-protocol.protocols.config-similarity-protocol",
-}
-
-local nextAvailableRegistrySlot = function()
-  local i = FIRST_AVAILABLE_NUMBER
-  while true do
-    if PROTOCOL_REGISTRY[i] == nil and KNOWN_REGISTRY_ENTRIES[i] == nil then 
-      return i 
-    end
-
-    i = i + 1
-  end
-end
-
----@class InvocationLock
----@field current Protocol currently executing protocol
-local InvocationLock = {}
-
----Lock to lock what kind of invocation can be called
----Lockstep protocols (game time) can never call immediate protocols
----@type InvocationLock
-local INVOCATION_LOCK = {
-  current = nil,
-}
 
 local setCommandParameterSize = function(size) core.writeInteger(COMMAND_PARAMETER_SIZE_ADDRESS, size) end
 local getCommandParameterSize = function(size) core.readInteger(COMMAND_PARAMETER_SIZE_ADDRESS) end
@@ -215,6 +152,11 @@ end
 local setCommandTime = function(commandID, t)
   core.writeInteger(getCommandMetaInformation(commandID).base + 0, t)
 end
+
+local PlanEnum = globals.PlanEnum
+local PlanNames = globals.PlanNames
+local PROTOCOL_REGISTRY = globals.PROTOCOL_REGISTRY
+local INVOCATION_LOCK = globals.INVOCATION_LOCK
 
 local setCommandActionPlan = function(plan) 
   core.writeInteger(COMMAND_ACTION_PLAN_ADDRESS, PlanEnum[plan])
@@ -488,6 +430,7 @@ local function argToProtocolNumber(p)
   return protocolNumber
 end
 
+
 ---Register a custom protocol
 ---@param self table reference to this module
 ---@param extension string name of the extension
@@ -499,6 +442,10 @@ end
 function namespace.registerCustomProtocol(self, extension, name, type, parameterSize, handler)
   -- TODO: insert check for known registerProtocol numbers
   -- TODO: insert check for too large parameter size?
+
+    
+  local KNOWN_REGISTRY_ENTRIES = globals.KNOWN_REGISTRY_ENTRIES
+  local nextAvailableRegistrySlot = globals.nextAvailableRegistrySlot
 
   local key = tostring(extension) .. ".protocols." .. tostring(name)
 
@@ -536,6 +483,9 @@ end
 ---@param key string key of the protocol
 ---@return nil
 function namespace.getProtocolNumberByKey(self, key)
+  
+local KNOWN_REGISTRY_ENTRIES = globals.KNOWN_REGISTRY_ENTRIES
+
   for number, k in pairs(KNOWN_REGISTRY_ENTRIES) do
     if k == key then return number end
   end
@@ -549,6 +499,9 @@ end
 ---@param name string name of the protocol
 ---@return nil
 function namespace.getProtocolNumber(self, extension, name)
+  
+  local KNOWN_REGISTRY_ENTRIES = globals.KNOWN_REGISTRY_ENTRIES
+
   local key = tostring(extension) .. ".protocols." .. tostring(name)
 
   for number, k in pairs(KNOWN_REGISTRY_ENTRIES) do
@@ -558,6 +511,8 @@ function namespace.getProtocolNumber(self, extension, name)
   return nil
 end
 
+
+local CUSTOM_PROTOCOL_NUMBER2 = globals.CUSTOM_PROTOCOL_NUMBER2
 
 ---Pretend a protocol invocation is received over multiplayer
 ---@param self table reference to the module
@@ -638,42 +593,7 @@ local function setupInvocationParameters(...)
 
 end
 
-local knownProtocolTypes = require("knownProtocolTypes")
----Only IMMEDIATE => IMMEDIATE works because there is a specific clause in the code
----that immediately clears the command if time == 0 (IMMEDIATE).
----All other combinations go through the processWaitingCommands which causes issues
----as the one waiting in the array is never put to processed.
-local function checkIllegalInvocationNesting(protocol)
-  local l = INVOCATION_LOCK.current
-
-  log(VERBOSE, string.format("checkIllegalInvocationNesting: checking active invocation type"))
-
-  if l ~= nil then
-    log(VERBOSE, string.format("checkIllegalInvocationNesting: checking active invocation type: %s", l.type))
-    -- We are currently executing/scheduling a protocol already, does this new invocation conflict?
-    if l.type == "LOCKSTEP" then
-      error(string.format("A %s protocol can never invoke another protocol: %s",  l.type, protocol))
-    elseif l.type == "IMMEDIATE" then
-      local kpt = knownProtocolTypes[protocol]
-      if kpt ~= nil then
-        log(VERBOSE, string.format("checkIllegalInvocationNesting: checking active invocation type: %s against %s", l.type, kpt))
-        if kpt == "LOCKSTEP" then
-          error(string.format("A %s protocol can never invoke an %s protocol (%s)",  l.type, kpt, protocol))
-        end
-      else
-        local pr = PROTOCOL_REGISTRY[protocol]
-        if pr ~= nil then
-          log(VERBOSE, string.format("checkIllegalInvocationNesting: checking active invocation type: %s against %s", l.type, pr))
-          if pr.type == "LOCKSTEP" then
-            error(string.format("A %s protocol can never invoke an %s protocol (%s)", l.type, pr, protocol))
-          end
-        else
-          log(WARNING, string.format("checkIllegalInvocationNesting: cannot check, unknown protocol type: %s", protocol))
-        end
-      end
-    end
-  end
-end
+local checkIllegalInvocationNesting = require("helpers.checkIllegalInvocationNesting").checkIllegalInvocationNesting
 
 ---Invoke original protocol
 ---@param self table reference to this module
@@ -691,7 +611,8 @@ function namespace.invokeOriginalProtocol(self, protocol, ...)
   _queueCommand(MULTIPLAYER_HANDLER_ADDRESS, protocol)
 end
 
-
+local FIRST_AVAILABLE_NUMBER = globals.FIRST_AVAILABLE_NUMBER
+local CUSTOM_PROTOCOL_NUMBER1 = globals.CUSTOM_PROTOCOL_NUMBER1
 
 ---Invoke custom protocol by name or number
 ---Arguments for the protocol are to be set up during the call to scheduleForSend
@@ -722,6 +643,7 @@ function namespace.invokeCustomProtocol(self, protocol)
   end
 end
 
+local LAST_ORIGINAL_NUMBER = globals.LAST_ORIGINAL_NUMBER
 
 ---Invoke protocol by number or key
 ---@param self table reference to this module
