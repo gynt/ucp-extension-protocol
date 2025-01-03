@@ -1,412 +1,15 @@
 
 local globals = require("globals")
-
--- commandCategory of the current command is in EDX
--- preserve EDX
--- make sure the replaced code is reinserted after the hook code
-local scheduleCommandHook1Location = core.AOBScan("8B ? ? ? ? ? ? FF D0 8B ? ? ? ? ? 8B 54 24 20")
-local scheduleCommandHook1Size = 7
-
--- commandCategory of the current command is in EAX
--- preserve EAX
--- make sure the replaced code is reinserted after the hook code
-local scheduleCommandHook2Location = core.AOBScan("8B ? ? ? ? ? ? FF D1 8B ? ? ? ? ? 52 8B CE E8 ? ? ? ? 5F")
-local scheduleCommandHook2Size = 7
-
--- commandCategory of the current command is in EAX
--- preserve EAX
--- make sure the replaced code is reinserted after the hook code
-local sendLongerDataHookLocation = core.AOBScan("8B ? ? ? ? ? ? FF D1 89 ? ? ? ? ?")
-local sendLongerDataHookSize = 7
-
--- commandCategory of the current command is in EDX
--- preserve EDX
--- make sure the replaced code is reinserted after the hook code
-local processWaitingCommandsHookLocation = core.AOBScan("8B ? ? ? ? ? ? FF D0 8B ? ? ? ? ? 69 ? ? ? ? ? 83 C5 01")
-local processWaitingCommandsHookSize = 7
-
--- commandCategory of the current command is in ECX
--- preserve ECX
--- make sure the replaced code is reinserted after the hook code
-local queueCommandHook1Location = core.AOBScan("8B ? ? ? ? ? ? FF D2 8B ? ? ? ? ? 69 ? ? ? ? ?")
-local queueCommandHook1Size = 7
-
--- commandCategory of the current command is in EDX
--- preserve EDX
--- make sure the replaced code is reinserted after the hook code
-local queueCommandHook2Location = core.AOBScan("8B ? ? ? ? ? ? FF D0 8B ? ? ? ? ? 51")
-local queueCommandHook2Size = 7
-
--- Crusader Extreme commands are longer I believe
-local TOTAL_GAME_COMMAND_SIZE = 1272
+local common = require("protocols.common")
+local interface = require("game.interface")
 
 
-
--- ECX value for most multiplayer functionality (command functionality)
-local MULTIPLAYER_HANDLER_ADDRESS = core.readInteger(core.AOBScan("B9 ? ? ? ? E8 ? ? ? ? 39 ? ? ? ? ? 75 17") + 1)
-
-local CURRENT_PLAYER_SLOT_ID_ADDRESS = core.readInteger(core.AOBScan("3B ? ? ? ? ? 75 1C 8B ? ? ? ? ?") + 2)
-local MATCH_TIME_ADDRESS = core.readInteger(core.AOBScan("3B ? ? ? ? ? 75 1C 8B ? ? ? ? ?") + 6 + 2 + 2)
-
-local COMMAND_PARAMETER_SIZE_ADDRESS = MULTIPLAYER_HANDLER_ADDRESS + core.readInteger(core.AOBScan("8B ? ? ? ? ? 8D ? ? ? ? ? 51 52 50") + 2)
-local COMMAND_FIXED_PARAMETER_LOCATION_ADDRESS = MULTIPLAYER_HANDLER_ADDRESS + core.readInteger(core.AOBScan("8B ? ? ? ? ? 8D ? ? ? ? ? 51 52 50") + 6 + 2)
-
-local COMMAND_FIXED_RECEIVED_PARAMETER_LOCATION_ADDRESS = MULTIPLAYER_HANDLER_ADDRESS + core.readInteger(core.AOBScan("8D ? ? ? ? ? 52 8B 13") + 2)
-
-local COMMAND_CURRENT_ID_ADDRESS = MULTIPLAYER_HANDLER_ADDRESS + core.readInteger(core.AOBScan("8B ? ? ? ? ? 69 ? ? ? ? ? 8B ? ? ? ? ? ? 8D 3C 31") + 2)
-
-local COMMAND_ARRAY_ADDRESS = MULTIPLAYER_HANDLER_ADDRESS + core.readInteger(core.AOBScan("89 ? ? ? ? ? ? 8B ? ? ? ? ? 69 ? ? ? ? ? 89 ? ? ? ? ? C7 ? ? ? ? ? ? ? ? ?") + 3)
-
-local niceCommandInfo = core.AOBScan("89 ? ? ? ? ? 89 ? ? ? ? ? 89 ? ? ? ? ? 89 ? ? ? ? ? 89 ? ? ? ? ? 89 ? ? ? ? ? 89 ? ? ? ? ? 89 ? ? ? ? ? 89 ? ? ? ? ? 0F ? ? ? ? ? ? 8B ? ? ? ? ? ?")
-local COMMAND_CLICKED_BY_PLAYER_ADDRESS = MULTIPLAYER_HANDLER_ADDRESS + core.readInteger(niceCommandInfo + 2)
-local COMMAND_PARAM_5_ADDRESS = MULTIPLAYER_HANDLER_ADDRESS + core.readInteger(niceCommandInfo + 2 + 6)
-local COMMAND_PARAM_4_ADDRESS = MULTIPLAYER_HANDLER_ADDRESS + core.readInteger(niceCommandInfo + 2 + 6 + 6)
-local COMMAND_PARAM_3_ADDRESS = MULTIPLAYER_HANDLER_ADDRESS + core.readInteger(niceCommandInfo + 2 + 6 + 6 + 6)
-local COMMAND_PARAM_2_ADDRESS = MULTIPLAYER_HANDLER_ADDRESS + core.readInteger(niceCommandInfo + 2 + 6 + 6 + 6 + 6)
-local COMMAND_PARAM_1_ADDRESS = MULTIPLAYER_HANDLER_ADDRESS + core.readInteger(niceCommandInfo + 2 + 6 + 6 + 6 + 6 + 6)
-local COMMAND_PARAM_0_ADDRESS = MULTIPLAYER_HANDLER_ADDRESS + core.readInteger(niceCommandInfo + 2 + 6 + 6 + 6 + 6 + 6 + 6)
-
--- 0 means execute, 1 means schedule, 2 means received
-local COMMAND_ACTION_PLAN_ADDRESS = MULTIPLAYER_HANDLER_ADDRESS + core.readInteger(niceCommandInfo + 2 + 6 + 6 + 6 + 6 + 6 + 6 + 6)
-
--- Offset into the parameter array (where currently is being read or written from)
-local COMMAND_PARAMETER_OFFSET_ADDRESS = MULTIPLAYER_HANDLER_ADDRESS + core.readInteger(niceCommandInfo + 2 + 6 + 6 + 6 + 6 + 6 + 6 + 6 + 6)
-
-local commandParameterSpaceSize = 1260
-local commandParameterSpace = core.allocate(commandParameterSpaceSize, true)
-
-
-
-local function codeGenerator(register)
-
-  local registerAssembly = nil
-
-  if register == "EAX" then
-    registerAssembly = 0xf8
-  elseif register == "ECX" then
-    registerAssembly = 0xf9
-  elseif register == "EDX" then
-    registerAssembly = 0xfa
-  else
-    error("Unsupported register " .. tostring(register))
-  end
-
-  return {
-    0x83, registerAssembly, globals.CUSTOM_PROTOCOL_NUMBER1, 
-    0x75, 0x07, 
-    0x90, 0x90, 0x90, 0x90, 0x90,
-    0xEB, 0x0A, 
-    0x83, registerAssembly, globals.CUSTOM_PROTOCOL_NUMBER2, 
-    0x75, 0x05, 
-    0x90, 0x90, 0x90, 0x90, 0x90,
-    0xC3 
-  }
-
-end
-
-local _queueCommandFinder = core.AOBScan("E8 ? ? ? ? 8B ? ? ? ? ? 8B 4C 24 10 01 ? ? ? ? ? 03 C8 3B ? ? ? ? ? 89 4C 24 10 0F ? ? ? ? ? 83 ? ? ? ? 83 C5 01 83 FD 40")
-local _queueCommandAddress = core.readInteger(_queueCommandFinder + 1) + (_queueCommandFinder + 5)
-log(1, string.format("queue command address: 0x%X", _queueCommandAddress))
-local _queueCommand = core.exposeCode(_queueCommandAddress, 2, 1)
-
-
-local _scheduleCommand = core.exposeCode(core.AOBScan("56 8B F1 81 ? ? ? ? ? ? ? ? ?"), 5, 1)
-
-local setCommandParameterSize = function(size) core.writeInteger(COMMAND_PARAMETER_SIZE_ADDRESS, size) end
-local getCommandParameterSize = function(size) core.readInteger(COMMAND_PARAMETER_SIZE_ADDRESS) end
-
-local ParameterSerialisationHelper = require("ParameterSerialisationHelper")
-local FixedParameterLocationSerializer = ParameterSerialisationHelper:new({address = COMMAND_FIXED_PARAMETER_LOCATION_ADDRESS, offsetAddress = COMMAND_PARAMETER_OFFSET_ADDRESS})
--- This assumes scheduleCommand is always called with ReceivedParameterAddress as the address argument!
-local FixedReceivedParameterLocationSerializer = ParameterSerialisationHelper:new({address = COMMAND_FIXED_RECEIVED_PARAMETER_LOCATION_ADDRESS, offsetAddress = COMMAND_PARAMETER_OFFSET_ADDRESS})
-
-local getCommandOffset = function(commandID)
-  return COMMAND_ARRAY_ADDRESS + (commandID * TOTAL_GAME_COMMAND_SIZE)
-end
-
-
----@class CommandMetaInformation
----@field public base number the base address of the data for this invocation
----@field public time number the time the invocation should take place
----@field public player number the player invoking the protocol
----@field public category number the protocol number
----@field public state number the state of the protocol (executed, scheduled)
----@field public parametersAddress number the address of the parameters of this invocation
-
-
----Get data for the invocation
----@param commandID number invocation number
----@return CommandMetaInformation
-local getCommandMetaInformation = function(commandID)
-  local base = getCommandOffset(commandID)
-  return {
-    base = base,
-    time = core.readInteger(base),
-    player = core.readInteger(base + 4),
-    category = core.readByte(base + 4 + 4),
-    state = core.readByte(base + 4 + 4 + 1),
-    parametersAddress = base + 4 + 4 + 1 + 1,
-  }
-end
-
-local setCommandTime = function(commandID, t)
-  core.writeInteger(getCommandMetaInformation(commandID).base + 0, t)
-end
-
-local PlanEnum = globals.PlanEnum
-local PlanNames = globals.PlanNames
 local PROTOCOL_REGISTRY = globals.PROTOCOL_REGISTRY
-local INVOCATION_LOCK = globals.INVOCATION_LOCK
-
-local setCommandActionPlan = function(plan) 
-  core.writeInteger(COMMAND_ACTION_PLAN_ADDRESS, PlanEnum[plan])
-end
-
--- IMMEDIATE commands
-local function onProcessCommand121()
-  local state, err = pcall(function()
-    local id = core.readInteger(COMMAND_CURRENT_ID_ADDRESS)
-    local plan = core.readInteger(COMMAND_ACTION_PLAN_ADDRESS)
-    log(DEBUG, "custom immediate protocol invocation #" .. tostring(id) .. " called with plan: " .. tostring(PlanNames[plan]))
-
-    -- IMMEDIATE command specific code:
-    setCommandTime(id, 0) -- set to 0 so execution is immediate after queueing
-
-    local meta = getCommandMetaInformation(id)
-
-    log(VERBOSE, string.format("scheduled for time: %s", meta.time))
-
-    local psh = FixedParameterLocationSerializer
-
-    local subCommand = nil
-    if plan == PlanEnum.SCHEDULE_FOR_SEND then
-      -- Player did a queueCommand, read the information in this parameter to get the sub protocol information
-      subCommand = core.readInteger(COMMAND_PARAM_0_ADDRESS)
-      FixedParameterLocationSerializer:serializeInteger(subCommand)
-      psh = FixedParameterLocationSerializer
-    elseif plan == PlanEnum.EXECUTE then
-      subCommand = FixedParameterLocationSerializer:deserializeInteger()
-      psh = FixedParameterLocationSerializer
-    elseif plan == PlanEnum.SCHEDULE_AFTER_RECEIVE then
-      subCommand = FixedReceivedParameterLocationSerializer:deserializeInteger()
-      psh = FixedReceivedParameterLocationSerializer
-    end
-
-    log(VERBOSE, "subcommand: " .. tostring(subCommand))
-
-    ---@type Protocol
-    local prot = PROTOCOL_REGISTRY[subCommand]
-    if prot == nil then
-      error("Unknown protocol: " .. tostring(subCommand))
-    end
-
-    log(DEBUG, "following protocol: " .. prot.name .. " as defined by extension: " .. prot.extension)
-
-    setCommandParameterSize(4 + prot.parameterSize) -- at least 4 to house the sub protocol as a parameter
-
-    meta.parameters = psh
-
-    local cb
-    if plan == PlanEnum["SCHEDULE_FOR_SEND"] then
-      cb = prot.handler.scheduleForSend
-    elseif plan == PlanEnum["SCHEDULE_AFTER_RECEIVE"] then
-      cb = prot.handler.scheduleAfterReceive
-    elseif plan == PlanEnum["EXECUTE"] then
-      cb = prot.handler.execute
-    end
-
-    if cb == nil then
-      error("No callback for plan: " .. tostring(PlanNames[plan]))
-    end
-
-    log(1, "Calling into handler: ")
-    INVOCATION_LOCK.current = prot
-    local state, result = pcall(cb, prot.handler, meta)
-    INVOCATION_LOCK.current = nil
-    if not state then
-      error("Error occurred when executing handler for: " .. tostring(subCommand) .. ". Message: " .. tostring(result))
-    end
-
-    if plan == PlanEnum.SCHEDULE_FOR_SEND then
-      setCommandActionPlan(PlanEnum.EXECUTE)
-    end
-
-  end)
-  
-  if not state then log(WARNING, err) end
-end
-
--- LOCKSTEP commands
-local function onProcessCommand122()
-  local state, err = pcall(function()
-    local id = core.readInteger(COMMAND_CURRENT_ID_ADDRESS)
-    local plan = core.readInteger(COMMAND_ACTION_PLAN_ADDRESS)
-    log(DEBUG, "custom lockstep protocol invocation #" .. tostring(id) .. " called with plan: " .. tostring(PlanNames[plan]))
-
-    log(DEBUG, "get command meta information")
-    local meta = getCommandMetaInformation(id)
-
-    log(VERBOSE, string.format("scheduled for time: %s", meta.time))
-
-    log(DEBUG, "create ParameterSerialisationHelper")
-    local psh = ParameterSerialisationHelper:new({address = meta.parametersAddress, offsetAddress = COMMAND_PARAMETER_OFFSET_ADDRESS})
-
-    log(VERBOSE, string.format("offset address: %X", psh.offsetAddress))
-
-    local subCommand = nil
-    if plan == PlanEnum.SCHEDULE_FOR_SEND then
-      log(DEBUG, string.format("read integer from: %X", COMMAND_PARAM_0_ADDRESS))
-      -- Player did a queueCommand, read the information in this parameter to get the sub protocol information
-      subCommand = core.readInteger(COMMAND_PARAM_0_ADDRESS)
-      psh:serializeInteger(subCommand)
-      -- psh = ParameterSerialisationHelper
-    elseif plan == PlanEnum.EXECUTE then
-      log(DEBUG, "deserialize integer from parameters")
-      subCommand = psh:deserializeInteger()
-      -- psh = ParameterSerialisationHelper
-    elseif plan == PlanEnum.SCHEDULE_AFTER_RECEIVE then
-      log(DEBUG, "deserialize integer from parameters")
-      subCommand = psh:deserializeInteger()
-      -- psh = ParameterSerialisationHelper
-    end
-
-    log(DEBUG, "subcommand: " .. tostring(subCommand))
-
-    local prot = PROTOCOL_REGISTRY[subCommand]
-    if prot == nil then
-      error("Unknown protocol: " .. tostring(subCommand))
-    end
-
-    log(DEBUG, "following protocol: " .. prot.name .. " as defined by extension: " .. prot.extension)
-
-    setCommandParameterSize(4 + prot.parameterSize) -- at least 4 to house the sub protocol as a parameter
-
-    meta.parameters = psh
-
-    local cb
-    if plan == PlanEnum["SCHEDULE_FOR_SEND"] then
-      cb = prot.handler.scheduleForSend
-    elseif plan == PlanEnum["SCHEDULE_AFTER_RECEIVE"] then
-      cb = prot.handler.scheduleAfterReceive
-    elseif plan == PlanEnum["EXECUTE"] then
-      cb = prot.handler.execute
-    end
-
-    if cb == nil then
-      error("No callback for plan: " .. tostring(PlanNames[plan]))
-    end
-
-    log(DEBUG, "executing callback for plan: " .. tostring(PlanNames[plan]))
-    INVOCATION_LOCK.current = prot
-    local state, result = pcall(cb, prot.handler, meta)
-    INVOCATION_LOCK.current = nil
-    if not state then
-      error("Error occurred when executing handler for: " .. tostring(subCommand) .. ". Message: " .. tostring(result))
-    end
-
-    log(DEBUG, "callback succesful for plan: " .. tostring(PlanNames[plan]))
-
-  end)
-  
-  if not state then log(WARNING, string.format("custom protocol failed to execute: \n%s", err)) end
-end
-
-
 
 local namespace = {
   enable = function(self, config)
 
-    local onProcessCommand_landingLocation_EAX = core.allocateCode(codeGenerator("EAX"))
-
-    local onProcessCommand_landingLocation_ECX = core.allocateCode(codeGenerator("ECX"))
-    
-    local onProcessCommand_landingLocation_EDX = core.allocateCode(codeGenerator("EDX"))
-
-    log(DEBUG, string.format("Landing locations: EAX: 0x%X; ECX: 0x%X; EDX: 0x%X", onProcessCommand_landingLocation_EAX, onProcessCommand_landingLocation_ECX, onProcessCommand_landingLocation_EDX))
-    
-    -- call onProcessCommand and set the command type to 0 because custom command type (121) does not exist. 0 is a dummy
-    core.detourCode(function(registers) 
-        registers.EAX = 0
-        onProcessCommand121()
-        return registers 
-      end, onProcessCommand_landingLocation_EAX + 5, 5)
-    core.detourCode(function(registers) 
-        registers.ECX = 0
-        onProcessCommand121()
-        return registers 
-      end, onProcessCommand_landingLocation_ECX + 5, 5)
-    core.detourCode(function(registers) 
-        registers.EDX = 0
-        onProcessCommand121()
-        return registers
-      end, onProcessCommand_landingLocation_EDX + 5, 5)
-    
-    -- Untested
-    core.detourCode(function(registers) 
-        registers.EAX = 0
-        onProcessCommand122()
-        return registers
-      end, onProcessCommand_landingLocation_EAX + 5 + 5 + 5 + 2, 5)
-    core.detourCode(function(registers) 
-        registers.ECX = 0
-        onProcessCommand122()
-        return registers
-      end, onProcessCommand_landingLocation_ECX + 5 + 5 + 5 + 2, 5)
-    core.detourCode(function(registers)
-        registers.EDX = 0
-        onProcessCommand122()
-        return registers 
-      end, onProcessCommand_landingLocation_EDX + 5 + 5 + 5 + 2, 5)
-    
-
-    core.insertCode(
-      scheduleCommandHook1Location, 
-    scheduleCommandHook1Size, 
-    {core.callTo(onProcessCommand_landingLocation_EDX)},
-    nil,
-    "after"
-    )
-
-    core.insertCode(
-      processWaitingCommandsHookLocation, 
-      processWaitingCommandsHookSize, 
-    {core.callTo(onProcessCommand_landingLocation_EDX)},
-    nil,
-    "after"
-    )
-  
-    core.insertCode(
-      queueCommandHook2Location, 
-      queueCommandHook2Size, 
-    {core.callTo(onProcessCommand_landingLocation_EDX)},
-    nil,
-    "after"
-    )
-
-    core.insertCode(
-      scheduleCommandHook2Location, 
-      scheduleCommandHook2Size, 
-    {core.callTo(onProcessCommand_landingLocation_EAX)},
-    nil,
-    "after"
-    )
-
-    core.insertCode(
-      sendLongerDataHookLocation, 
-      sendLongerDataHookSize, 
-    {core.callTo(onProcessCommand_landingLocation_EAX)},
-    nil,
-    "after"
-    )
-  
-    core.insertCode(
-      queueCommandHook1Location, 
-      queueCommandHook1Size, 
-    {core.callTo(onProcessCommand_landingLocation_ECX)},
-    nil,
-    "after"
-    )
-
+    require("game.hooks").setHooks()
 
     require("tests")
   end,
@@ -513,6 +116,9 @@ end
 
 
 local CUSTOM_PROTOCOL_NUMBER2 = globals.CUSTOM_PROTOCOL_NUMBER2
+local COMMAND_FIXED_RECEIVED_PARAMETER_LOCATION_ADDRESS = common.COMMAND_FIXED_RECEIVED_PARAMETER_LOCATION_ADDRESS
+local MULTIPLAYER_HANDLER_ADDRESS = common.MULTIPLAYER_HANDLER_ADDRESS
+local _scheduleCommand = interface._scheduleCommand
 
 ---Pretend a protocol invocation is received over multiplayer
 ---@param self table reference to the module
@@ -522,7 +128,7 @@ local CUSTOM_PROTOCOL_NUMBER2 = globals.CUSTOM_PROTOCOL_NUMBER2
 ---@param parameterBytes table table of bytes that represent the parameters to the protocol invocation
 ---@return nil
 function namespace.injectProtocol(self, protocol, player, time, parameterBytes)
-  if #parameterBytes > commandParameterSpaceSize then 
+  if #parameterBytes > globals.MAX_PARAMETER_LENGTH then 
     error("parameter bytes is too long")
   else
     core.writeBytes(COMMAND_FIXED_RECEIVED_PARAMETER_LOCATION_ADDRESS, parameterBytes)
@@ -537,12 +143,12 @@ end
 
 
 local argArrayMemoryMapping = {
-  COMMAND_PARAM_0_ADDRESS,
-  COMMAND_PARAM_1_ADDRESS,
-  COMMAND_PARAM_2_ADDRESS,
-  COMMAND_PARAM_3_ADDRESS,
-  COMMAND_PARAM_4_ADDRESS,
-  COMMAND_PARAM_5_ADDRESS,
+  common.COMMAND_PARAM_0_ADDRESS,
+  common.COMMAND_PARAM_1_ADDRESS,
+  common.COMMAND_PARAM_2_ADDRESS,
+  common.COMMAND_PARAM_3_ADDRESS,
+  common.COMMAND_PARAM_4_ADDRESS,
+  common.COMMAND_PARAM_5_ADDRESS,
 }
 
 ---Write parameters to memory
@@ -594,6 +200,7 @@ local function setupInvocationParameters(...)
 end
 
 local checkIllegalInvocationNesting = require("helpers.checkIllegalInvocationNesting").checkIllegalInvocationNesting
+local _queueCommand = interface._queueCommand
 
 ---Invoke original protocol
 ---@param self table reference to this module
@@ -633,10 +240,10 @@ function namespace.invokeCustomProtocol(self, protocol)
   checkIllegalInvocationNesting(protocolNumber)
 
   if PROTOCOL_REGISTRY[protocolNumber].type == "IMMEDIATE" then
-    core.writeInteger(COMMAND_PARAM_0_ADDRESS, protocolNumber)
+    core.writeInteger(common.COMMAND_PARAM_0_ADDRESS, protocolNumber)
     self:invokeOriginalProtocol(CUSTOM_PROTOCOL_NUMBER1) -- todo, add arg protocolNumber
   elseif PROTOCOL_REGISTRY[protocolNumber].type == "LOCKSTEP" then
-    core.writeInteger(COMMAND_PARAM_0_ADDRESS, protocolNumber)
+    core.writeInteger(common.COMMAND_PARAM_0_ADDRESS, protocolNumber)
     self:invokeOriginalProtocol(CUSTOM_PROTOCOL_NUMBER2) -- todo, add arg protocolNumber
   else
     error(string.format("unknown protocol type: %s", tostring(PROTOCOL_REGISTRY[protocolNumber].type)))

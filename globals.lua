@@ -65,6 +65,8 @@ local INVOCATION_LOCK = {
   current = nil,
 }
 
+local MAX_PARAMETER_LENGTH = 1260
+
 return {
   LAST_ORIGINAL_NUMBER = LAST_ORIGINAL_NUMBER,
   CUSTOM_PROTOCOL_NUMBER1 = CUSTOM_PROTOCOL_NUMBER1,
@@ -79,4 +81,5 @@ return {
   nextAvailableRegistrySlot = nextAvailableRegistrySlot,
   InvocationLock = InvocationLock,
   INVOCATION_LOCK = INVOCATION_LOCK,
+  MAX_PARAMETER_LENGTH = MAX_PARAMETER_LENGTH,
 }
