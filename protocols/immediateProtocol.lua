@@ -16,7 +16,7 @@ local COMMAND_PARAMETER_OFFSET_ADDRESS = common.COMMAND_PARAMETER_OFFSET_ADDRESS
 local COMMAND_FIXED_PARAMETER_LOCATION_ADDRESS = common.COMMAND_FIXED_PARAMETER_LOCATION_ADDRESS
 local COMMAND_FIXED_RECEIVED_PARAMETER_LOCATION_ADDRESS = common.COMMAND_FIXED_RECEIVED_PARAMETER_LOCATION_ADDRESS
 
-local ParameterSerialisationHelper = require("ParameterSerialisationHelper")
+local ParameterSerialisationHelper = require("protocols.ParameterSerialisationHelper")
 local FixedParameterLocationSerializer = ParameterSerialisationHelper:new({address = COMMAND_FIXED_PARAMETER_LOCATION_ADDRESS, offsetAddress = COMMAND_PARAMETER_OFFSET_ADDRESS})
 -- This assumes scheduleCommand is always called with ReceivedParameterAddress as the address argument!
 local FixedReceivedParameterLocationSerializer = ParameterSerialisationHelper:new({address = COMMAND_FIXED_RECEIVED_PARAMETER_LOCATION_ADDRESS, offsetAddress = COMMAND_PARAMETER_OFFSET_ADDRESS})

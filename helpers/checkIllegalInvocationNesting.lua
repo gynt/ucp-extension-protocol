@@ -1,8 +1,10 @@
+local knownProtocolTypes = require("game.knownProtocolTypes")
+
 local globals = require("globals")
 local INVOCATION_LOCK = globals.INVOCATION_LOCK
 local PROTOCOL_REGISTRY = globals.PROTOCOL_REGISTRY
 
-local knownProtocolTypes = require("knownProtocolTypes")
+
 ---Only IMMEDIATE => IMMEDIATE works because there is a specific clause in the code
 ---that immediately clears the command if time == 0 (IMMEDIATE).
 ---All other combinations go through the processWaitingCommands which causes issues

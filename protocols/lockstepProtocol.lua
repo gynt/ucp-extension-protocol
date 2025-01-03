@@ -13,7 +13,7 @@ local getCommandMetaInformation = common.getCommandMetaInformation
 local setCommandParameterSize = common.setCommandParameterSize
 local COMMAND_PARAMETER_OFFSET_ADDRESS = common.COMMAND_PARAMETER_OFFSET_ADDRESS
 
-local ParameterSerialisationHelper = require("ParameterSerialisationHelper")
+local ParameterSerialisationHelper = require("protocols.ParameterSerialisationHelper")
 
 -- LOCKSTEP commands
 local function onProcessCommand122()
