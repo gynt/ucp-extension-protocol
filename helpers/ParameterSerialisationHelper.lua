@@ -1,4 +1,5 @@
 
+---@class ParameterSerialisationHelper
 local ParameterSerialisationHelper = {}
 
 -- First parameter should be a table with address: o

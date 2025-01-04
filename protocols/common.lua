@@ -37,11 +37,12 @@ end
 ---@class CommandMetaInformation
 ---@field public base number the base address of the data for this invocation
 ---@field public time number the time the invocation should take place
+---@field public timeAddress number the memory pointer to the time (int32) the invocation should take place
 ---@field public player number the player invoking the protocol
 ---@field public category number the protocol number
 ---@field public state number the state of the protocol (executed, scheduled)
 ---@field public parametersAddress number the address of the parameters of this invocation
-
+---@field public parameters ParameterSerializationHelper helper to (de)serialize parameters
 
 ---Get data for the invocation
 ---@param commandID number invocation number
@@ -51,10 +52,12 @@ local getCommandMetaInformation = function(commandID)
   return {
     base = base,
     time = core.readInteger(base),
+    timeAddress = base,
     player = core.readInteger(base + 4),
     category = core.readByte(base + 4 + 4),
     state = core.readByte(base + 4 + 4 + 1),
     parametersAddress = base + 4 + 4 + 1 + 1,
+    parameters = {},
   }
 end
 

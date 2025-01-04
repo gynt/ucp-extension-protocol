@@ -19,11 +19,13 @@ modules.chatcommands:registerChatCommand("test0", function(command)
   return false
 end)
 
+---@type Handler
 local test1 = {
 
   -- This is called when a user initiates the protocol (with a queueProtocol(protocolNumber) call)
   -- The protocol designer is responsible for storing the to-be-send data somewhere in memory
   scheduleForSend = function(self, meta)
+    
     
     -- For example, assume you want to implement that sleep can be toggled per building (instead of per building type)
     -- meta.parameters:writeInteger(core.readInteger(PLACE_WHERE_BUILDING_ID_IS_STORED))
@@ -109,6 +111,46 @@ modules.chatcommands:registerChatCommand("test3", function(command)
   -- If you want to set up your data gathering before sending the command, do it here and now just like the game does
 
   modules.protocol:invokeProtocol(test3ProtocolNumber)
+
+  return false
+end)
+
+
+
+local test4 = {
+
+  scheduleForSend = function(self, meta)
+    local time = core.readInteger(meta.timeAddress)
+    local newTime = time + 1000
+
+    log(1, string.format("test4: scheduleForSend: moving scheduled time from %s to %s", time, newTime))
+    -- You are not really supposed to do this but for showcasing the mechanics it is nice
+    core.writeInteger(meta.timeAddress, newTime)
+
+    meta.parameters:serializeInteger(time)
+    meta.parameters:serializeInteger(newTime)
+  end,
+
+  scheduleAfterReceive = function(self, meta)
+    log(1, string.format("test4: scheduleAfterReceive"))
+  end,
+
+  execute = function(self, meta)
+    local time = meta.parameters:deserializeInteger()
+    local newTime = meta.parameters:deserializeInteger()
+    local msg = string.format("test4: execute: %s => %s at ", time, newTime)
+    log(1, msg)
+    modules.chat:fireChatEvent(msg, 0)
+  end,
+
+}
+
+---Expect success
+local test4ProtocolNumber = modules.protocol:registerCustomProtocol("protocol", "test4", "LOCKSTEP", 32, test4)
+modules.chatcommands:registerChatCommand("test4", function(command)
+  -- If you want to set up your data gathering before sending the command, do it here and now just like the game does
+
+  modules.protocol:invokeProtocol(test4ProtocolNumber)
 
   return false
 end)
