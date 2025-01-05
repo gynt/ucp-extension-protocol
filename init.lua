@@ -33,6 +33,7 @@ local function argToProtocolNumber(p)
   return protocolNumber
 end
 
+local knownProtocolTypes = require("game.knownProtocolTypes")
 
 ---Register a custom protocol
 ---@param self table reference to this module
@@ -77,6 +78,8 @@ function namespace.registerCustomProtocol(self, extension, name, type, parameter
     handler = handler,
   }
   PROTOCOL_REGISTRY[number] = protocol
+
+  knownProtocolTypes[number] = type
 
   return number
 end
@@ -141,63 +144,7 @@ function namespace.injectProtocol(self, protocol, player, time, parameterBytes)
   _scheduleCommand(MULTIPLAYER_HANDLER_ADDRESS, protocol, player, time, COMMAND_FIXED_RECEIVED_PARAMETER_LOCATION_ADDRESS)
 end
 
-
-local argArrayMemoryMapping = {
-  common.COMMAND_PARAM_0_ADDRESS,
-  common.COMMAND_PARAM_1_ADDRESS,
-  common.COMMAND_PARAM_2_ADDRESS,
-  common.COMMAND_PARAM_3_ADDRESS,
-  common.COMMAND_PARAM_4_ADDRESS,
-  common.COMMAND_PARAM_5_ADDRESS,
-}
-
----Write parameters to memory
----@param ... the parameters to write, can be tables and loose integers
----@return nil
-local function setupInvocationParameters(...)
-  local args = table.pack(...)
-  args.n = nil
-
-  local argArray = {}
-  local otherArg = {}
-  for _, arg in ipairs(args) do
-    if type(arg) == "table" then
-      for k, v in pairs(arg) do
-        if type(k) == "number" then
-          -- add it to the list of args
-          table.insert(argArray, v)  
-        elseif type(k) == "string" then
-          if otherArg[k] ~= nil then
-            error(string.format("cannot overwrite already specified argument: %s", k))
-          end
-          -- add it to a special set
-          otherArg[k] = v
-        else
-          error(string.format("illegal argument type: %s", type(v)))    
-        end
-        
-      end
-    elseif type(arg) == "number" then
-      -- add it to the list of args
-      table.insert(argArray, arg)
-    else
-      error(string.format("illegal argument type: %s", type(arg)))
-    end
-  end
-
-  if #argArray > 6 then
-    error(string.format("too many arguments applied: %s", #argArray))
-  end
-
-  for k,v in ipairs(argArray) do
-    core.writeInteger(argArrayMemoryMapping[k], v)
-  end
-
-  for k, v in pairs(otherArg) do
-    error(string.format("string keys for invocation parameters not yet supported: %s", tostring(k)))
-  end
-
-end
+local setupInvocationParameters = require("helpers.setupInvocationParameters").setupInvocationParameters
 
 local checkIllegalInvocationNesting = require("helpers.checkIllegalInvocationNesting").checkIllegalInvocationNesting
 local _queueCommand = interface._queueCommand
