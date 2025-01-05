@@ -115,8 +115,7 @@ modules.chatcommands:registerChatCommand("test3", function(command)
   return false
 end)
 
-
-
+---@type Handler
 local test4 = {
 
   scheduleForSend = function(self, meta)

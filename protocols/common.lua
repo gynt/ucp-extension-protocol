@@ -43,11 +43,12 @@ end
 ---@field public state number the state of the protocol (executed, scheduled)
 ---@field public parametersAddress number the address of the parameters of this invocation
 ---@field public parameters ParameterSerializationHelper helper to (de)serialize parameters
+local CommandMetaInformation = {}
 
 ---Get data for the invocation
 ---@param commandID number invocation number
 ---@return CommandMetaInformation
-local getCommandMetaInformation = function(commandID)
+local function getCommandMetaInformation(commandID)
   local base = getCommandOffset(commandID)
   return {
     base = base,

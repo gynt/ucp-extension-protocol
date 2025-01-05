@@ -22,10 +22,12 @@ local PlanEnum = {
 ---causing an infinite loop as the Handler's invocation is called
 ---repeatedly
 ---@class Handler
----@field public scheduleForSend fun(self: Handler, meta: CommandMetaInformation)
----@field public scheduleAfterReceive fun(self: Handler, meta: CommandMetaInformation)
----@field public execute fun(self: Handler, meta: CommandMetaInformation)
+---@field public scheduleForSend fun(self: Handler, meta: CommandMetaInformation):void
+---@field public scheduleAfterReceive fun(self: Handler, meta: CommandMetaInformation):void
+---@field public execute fun(self: Handler, meta: CommandMetaInformation):void
 local Handler = {}
+
+---@alias HandlerCallback fun(self: Handler, meta: CommandMetaInformation):void
 
 ---@class Protocol
 ---@field public extension string
