@@ -172,8 +172,9 @@ local CUSTOM_PROTOCOL_NUMBER1 = globals.CUSTOM_PROTOCOL_NUMBER1
 ---Arguments for the protocol are to be set up during the call to scheduleForSend
 ---@param self table reference to the module
 ---@param protocol number|string name or number of the protocol
+---@param context table a table representing the invocation context, passed unto schedule()
 ---@return nil
-function namespace.invokeCustomProtocol(self, protocol)
+function namespace.invokeCustomProtocol(self, protocol, context)
   local protocolNumber = argToProtocolNumber(protocol)
 
   if protocolNumber < FIRST_AVAILABLE_NUMBER then
@@ -186,6 +187,11 @@ function namespace.invokeCustomProtocol(self, protocol)
 
   checkIllegalInvocationNesting(protocolNumber)
 
+  -- This is legal since context is only used during scheduling
+  -- in case of context overriding occurring with multiple invocations
+  -- look here for solutions.
+  common.CONTEXT = context
+
   if PROTOCOL_REGISTRY[protocolNumber].type == "IMMEDIATE" then
     core.writeInteger(common.COMMAND_PARAM_0_ADDRESS, protocolNumber)
     self:invokeOriginalProtocol(CUSTOM_PROTOCOL_NUMBER1) -- todo, add arg protocolNumber
@@ -195,6 +201,9 @@ function namespace.invokeCustomProtocol(self, protocol)
   else
     error(string.format("unknown protocol type: %s", tostring(PROTOCOL_REGISTRY[protocolNumber].type)))
   end
+
+  -- Just to be sure
+  common.CONTEXT = nil
 end
 
 local LAST_ORIGINAL_NUMBER = globals.LAST_ORIGINAL_NUMBER
@@ -202,8 +211,9 @@ local LAST_ORIGINAL_NUMBER = globals.LAST_ORIGINAL_NUMBER
 ---Invoke protocol by number or key
 ---@param self table reference to this module
 ---@param protocol number|string name or number of the protocol
----@param ... number|table a number or table with numbers acting as the parameters to the invocation.
----Only supported for original protocols
+---@param ... number|table a number or table with numbers acting as the parameters to the invocation
+---in case of an original protocol. For custom protocols, a table representing the invocation context
+---passed unto schedule call
 ---@return nil
 function namespace.invokeProtocol(self, protocol, ...)
   local protocolNumber = argToProtocolNumber(protocol)
@@ -219,7 +229,7 @@ function namespace.invokeProtocol(self, protocol, ...)
   end
 
   if protocolNumber >= FIRST_AVAILABLE_NUMBER then
-    return self:invokeCustomProtocol(protocolNumber)
+    return self:invokeCustomProtocol(protocolNumber, ...)
   end
 
   error(string.format("illegal protocol number: %s", protocolNumber))
