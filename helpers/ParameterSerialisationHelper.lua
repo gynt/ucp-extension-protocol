@@ -1,4 +1,5 @@
 
+---Helper for serializing and deserializing invocation parameters
 ---@class ParameterSerialisationHelper
 local ParameterSerialisationHelper = {}
 

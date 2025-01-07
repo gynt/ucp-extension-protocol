@@ -1,16 +1,21 @@
 
 if modules.chatcommands == nil then
+  log(1, string.format("Cannot execute tests as module chatcommands isn't loaded"))
   return
 end
 
 if modules.chat == nil then
+  log(1, string.format("Cannot execute tests as module chat isn't loaded"))
   return
 end
 
 log(DEBUG, "setting up tests")
 
+---@type chatcommands
+local chatcommands = modules.chatcommands
+
 ---Expect success
-modules.chatcommands:registerChatCommand("test0", function(command)
+chatcommands:registerChatCommand("test0", function(command)
   -- If you want to set up your data gathering before sending the command, do it here and now just like the game does
 
   log(1, "Buying bread")
@@ -54,7 +59,7 @@ local test1 = {
 
 ---Expect failure
 local test1ProtocolNumber = modules.protocol:registerCustomProtocol("protocol", "test1", "IMMEDIATE", 32, test1)
-modules.chatcommands:registerChatCommand("test1", function(command)
+chatcommands:registerChatCommand("test1", function(command)
   -- If you want to set up your data gathering before sending the command, do it here and now just like the game does
 
   modules.protocol:invokeProtocol(test1ProtocolNumber)
@@ -79,7 +84,7 @@ local test2 = {
 
 ---Expect success
 local test2ProtocolNumber = modules.protocol:registerCustomProtocol("protocol", "test2", "IMMEDIATE", 32, test2)
-modules.chatcommands:registerChatCommand("test2", function(command)
+chatcommands:registerChatCommand("test2", function(command)
   -- If you want to set up your data gathering before sending the command, do it here and now just like the game does
 
 
@@ -107,7 +112,7 @@ local test3 = {
 
 ---Expect success
 local test3ProtocolNumber = modules.protocol:registerCustomProtocol("protocol", "test3", "LOCKSTEP", 32, test3)
-modules.chatcommands:registerChatCommand("test3", function(command)
+chatcommands:registerChatCommand("test3", function(command)
   -- If you want to set up your data gathering before sending the command, do it here and now just like the game does
 
   modules.protocol:invokeProtocol(test3ProtocolNumber)
@@ -115,12 +120,18 @@ modules.chatcommands:registerChatCommand("test3", function(command)
   return false
 end)
 
+---Simple class defining what context is given
+---@class MyContext
+---@field delayToApply number The delay to apply
+
 ---@type Handler
 local test4 = {
 
-  scheduleForSend = function(self, meta)
+  ---@param meta CommandMetaInformation
+  ---@param context MyContext
+  scheduleForSend = function(self, meta, context)
     local time = core.readInteger(meta.timeAddress)
-    local newTime = time + 1000
+    local newTime = time + context.delayToApply
 
     log(1, string.format("test4: scheduleForSend: moving scheduled time from %s to %s", time, newTime))
     -- You are not really supposed to do this but for showcasing the mechanics it is nice
@@ -144,12 +155,39 @@ local test4 = {
 
 }
 
+local parser = chatcommands:argparser("/test4")
+local delayCommand = parser:command("delay")
+delayCommand:argument("ticks", "Ticks to delay", 0, tonumber)
+
 ---Expect success
 local test4ProtocolNumber = modules.protocol:registerCustomProtocol("protocol", "test4", "LOCKSTEP", 32, test4)
-modules.chatcommands:registerChatCommand("test4", function(command)
+chatcommands:registerChatCommand("test4", function(args)
   -- If you want to set up your data gathering before sending the command, do it here and now just like the game does
+  local success, args = parser:parse(args)
+  log(2, string.format("parsed args status: %s", success))
+  
+  if not success then
+    local errorObj = args
+    return false, {errorObj.message, errorObj.usage}
+  end
 
-  modules.protocol:invokeProtocol(test4ProtocolNumber)
+  modules.protocol:invokeProtocol(test4ProtocolNumber, {
+    delayToApply = args.ticks,
+  })
+
+  return false
+end)
+
+--Overriding here as commands have a bit of an ugly default display
+local parserTest5 = chatcommands:argparser("/test5")-- :usage("/test5 delay <ticks>")
+local delayCommand5 = parserTest5:command("delay")
+delayCommand5:argument("ticks", "Ticks to delay", 0, tonumber)
+
+chatcommands:registerChatCommand(parserTest5, function(args)
+
+  modules.protocol:invokeProtocol(test4ProtocolNumber, {
+    delayToApply = args.ticks,
+  })
 
   return false
 end)

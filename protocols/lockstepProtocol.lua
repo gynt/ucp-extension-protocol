@@ -76,9 +76,16 @@ local function onProcessCommand122()
     end
 
     log(DEBUG, "executing callback for plan: " .. tostring(PlanNames[plan]))
+    local state, result
+    
     INVOCATION_LOCK.current = prot
-    local state, result = pcall(cb, prot.handler, meta)
+    if plan == PlanEnum["SCHEDULE_FOR_SEND"] then
+      state, result = pcall(cb, prot.handler, meta, globals.CONTEXT.current)
+    else
+      state, result = pcall(cb, prot.handler, meta)
+    end
     INVOCATION_LOCK.current = nil
+
     if not state then
       error("Error occurred when executing handler for: " .. tostring(subCommand) .. ". Message: " .. tostring(result))
     end

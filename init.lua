@@ -190,7 +190,10 @@ function namespace.invokeCustomProtocol(self, protocol, context)
   -- This is legal since context is only used during scheduling
   -- in case of context overriding occurring with multiple invocations
   -- look here for solutions.
-  common.CONTEXT = context
+  if globals.CONTEXT.current ~= nil then
+    log(WARNING, string.format("Context for custom protocol (#) invocation was non nil"))
+  end
+  globals.CONTEXT.current = context
 
   if PROTOCOL_REGISTRY[protocolNumber].type == "IMMEDIATE" then
     core.writeInteger(common.COMMAND_PARAM_0_ADDRESS, protocolNumber)
@@ -203,7 +206,7 @@ function namespace.invokeCustomProtocol(self, protocol, context)
   end
 
   -- Just to be sure
-  common.CONTEXT = nil
+  globals.CONTEXT.current = nil
 end
 
 local LAST_ORIGINAL_NUMBER = globals.LAST_ORIGINAL_NUMBER
