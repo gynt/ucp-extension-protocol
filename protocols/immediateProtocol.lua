@@ -46,7 +46,7 @@ local function onProcessCommand121()
     local psh = FixedParameterLocationSerializer
 
     local subCommand = nil
-    if plan == PlanEnum.SCHEDULE_FOR_SEND then
+    if plan == PlanEnum.SCHEDULE then
       -- Player did a queueCommand, read the information in this parameter to get the sub protocol information
       subCommand = core.readInteger(COMMAND_PARAM_0_ADDRESS)
       FixedParameterLocationSerializer:serializeInteger(subCommand)
@@ -74,8 +74,8 @@ local function onProcessCommand121()
     meta.parameters = psh
 
     local cb
-    if plan == PlanEnum["SCHEDULE_FOR_SEND"] then
-      cb = prot.handler.scheduleForSend or (
+    if plan == PlanEnum["SCHEDULE"] then
+      cb = prot.handler.schedule or (
         function() end
       )
     elseif plan == PlanEnum["SCHEDULE_AFTER_RECEIVE"] then
@@ -94,7 +94,7 @@ local function onProcessCommand121()
     local state, result
     
     INVOCATION_LOCK.current = prot
-    if plan == PlanEnum["SCHEDULE_FOR_SEND"] then
+    if plan == PlanEnum["SCHEDULE"] then
       state, result = pcall(cb, prot.handler, meta, globals.CONTEXT.current)
     else
       state, result = pcall(cb, prot.handler, meta)
@@ -105,7 +105,7 @@ local function onProcessCommand121()
       error("Error occurred when executing handler for: " .. tostring(subCommand) .. ". Message: " .. tostring(result))
     end
 
-    if plan == PlanEnum.SCHEDULE_FOR_SEND then
+    if plan == PlanEnum.SCHEDULE then
       setCommandActionPlan(PlanEnum.EXECUTE)
     end
 

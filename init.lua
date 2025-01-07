@@ -41,7 +41,7 @@ local knownProtocolTypes = require("game.knownProtocolTypes")
 ---@param name string name of the protocol
 ---@param type string "IMMEDIATE" or "LOCKSTEP"
 ---@param parameterSize number total size of the parameters in serialized form
----@param handler Handler handler of this protocol, table with function scheduleForSend, scheduleAfterReceive, and execute
+---@param handler Handler handler of this protocol, table with function schedule, scheduleAfterReceive, and execute
 ---@return nil
 function namespace.registerCustomProtocol(self, extension, name, type, parameterSize, handler)
   -- TODO: insert check for known registerProtocol numbers
@@ -169,7 +169,7 @@ local FIRST_AVAILABLE_NUMBER = globals.FIRST_AVAILABLE_NUMBER
 local CUSTOM_PROTOCOL_NUMBER1 = globals.CUSTOM_PROTOCOL_NUMBER1
 
 ---Invoke custom protocol by name or number
----Arguments for the protocol are to be set up during the call to scheduleForSend
+---Arguments for the protocol are to be set up during the call to schedule
 ---@param self table reference to the module
 ---@param protocol number|string name or number of the protocol
 ---@param context table a table representing the invocation context, passed unto schedule()

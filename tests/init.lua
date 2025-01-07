@@ -29,7 +29,7 @@ local test1 = {
 
   -- This is called when a user initiates the protocol (with a queueProtocol(protocolNumber) call)
   -- The protocol designer is responsible for storing the to-be-send data somewhere in memory
-  scheduleForSend = function(self, meta)
+  schedule = function(self, meta)
     
     
     -- For example, assume you want to implement that sleep can be toggled per building (instead of per building type)
@@ -69,7 +69,7 @@ end)
 
 local test2 = {
 
-  scheduleForSend = function(self, meta) end,
+  schedule = function(self, meta) end,
 
   scheduleAfterReceive = function(self, meta)
     
@@ -97,7 +97,7 @@ end)
 
 local test3 = {
 
-  scheduleForSend = function(self, meta) end,
+  schedule = function(self, meta) end,
 
   scheduleAfterReceive = function(self, meta)
     
@@ -129,11 +129,11 @@ local test4 = {
 
   ---@param meta CommandMetaInformation
   ---@param context MyContext
-  scheduleForSend = function(self, meta, context)
+  schedule = function(self, meta, context)
     local time = core.readInteger(meta.timeAddress)
     local newTime = time + context.delayToApply
 
-    log(1, string.format("test4: scheduleForSend: moving scheduled time from %s to %s", time, newTime))
+    log(1, string.format("test4: schedule: moving scheduled time from %s to %s", time, newTime))
     -- You are not really supposed to do this but for showcasing the mechanics it is nice
     core.writeInteger(meta.timeAddress, newTime)
 

@@ -26,7 +26,7 @@ local CommandMetaInformation = {}
 ---repeatedly. Similarly, an Immediate protocol can never invoke
 ---a Lockstep protocol because the Lockstep protocol will never scheduled
 ---@class Handler
----@field public scheduleForSend fun(self: Handler, meta: CommandMetaInformation, context: Context):void
+---@field public schedule fun(self: Handler, meta: CommandMetaInformation, context: Context):void
 ---@field public scheduleAfterReceive fun(self: Handler, meta: CommandMetaInformation):void
 ---@field public execute fun(self: Handler, meta: CommandMetaInformation):void
 local Handler = {}
@@ -88,13 +88,13 @@ local MAX_PARAMETER_LENGTH = 1260
 
 local PlanNames = {
   [0] = "EXECUTE", -- executing the command (deserialize + execute)
-  [1] = "SCHEDULE_FOR_SEND", -- sending your own command (serialize + place in command queue)
+  [1] = "SCHEDULE", -- sending your own command (serialize + place in command queue)
   [2] = "SCHEDULE_AFTER_RECEIVE", -- receiving command from another machine/player (prep steps for execution (never used by the game actually))
 }
 
 local PlanEnum = {
   ["EXECUTE"] = 0,
-  ["SCHEDULE_FOR_SEND"] = 1,
+  ["SCHEDULE"] = 1,
   ["SCHEDULE_AFTER_RECEIVE"] = 2,
 }
 
