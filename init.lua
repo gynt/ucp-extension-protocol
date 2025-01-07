@@ -11,7 +11,7 @@ local namespace = {
 
     require("game.hooks").setHooks()
 
-    require("tests")
+    -- require("tests")
   end,
   disable = function(self, config)
   end,
