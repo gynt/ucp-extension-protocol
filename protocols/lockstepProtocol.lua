@@ -64,9 +64,13 @@ local function onProcessCommand122()
 
     local cb
     if plan == PlanEnum["SCHEDULE_FOR_SEND"] then
-      cb = prot.handler.scheduleForSend
+      cb = prot.handler.scheduleForSend or (
+        function() end
+      )
     elseif plan == PlanEnum["SCHEDULE_AFTER_RECEIVE"] then
-      cb = prot.handler.scheduleAfterReceive
+      cb = prot.handler.scheduleAfterReceive or (
+        function() end
+      )
     elseif plan == PlanEnum["EXECUTE"] then
       cb = prot.handler.execute
     end
