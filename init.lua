@@ -95,7 +95,7 @@ end
 ---@return nil
 function namespace.getProtocolNumberByKey(self, key)
   
-local KNOWN_REGISTRY_ENTRIES = globals.KNOWN_REGISTRY_ENTRIES
+  local KNOWN_REGISTRY_ENTRIES = globals.KNOWN_REGISTRY_ENTRIES
 
   for number, k in pairs(KNOWN_REGISTRY_ENTRIES) do
     if k == key then return number end
