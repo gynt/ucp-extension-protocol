@@ -40,7 +40,8 @@ end
 
 local knownProtocolTypes = require("game.knownProtocolTypes")
 
----Register a custom protocol
+---Register a custom protocol. Note that an IMMEDIATE protocol (used to communicate information and events outside
+---of the simulation) can only invoke another IMMEDIATE protocol, but never a LOCKSTEP protocol.
 ---@param self table reference to this module
 ---@param extension string name of the extension
 ---@param name string name of the protocol
@@ -128,9 +129,9 @@ local COMMAND_FIXED_RECEIVED_PARAMETER_LOCATION_ADDRESS = common.COMMAND_FIXED_R
 local MULTIPLAYER_HANDLER_ADDRESS = common.MULTIPLAYER_HANDLER_ADDRESS
 local _scheduleCommand = interface._scheduleCommand
 
----Pretend a protocol invocation is received over multiplayer
+---Pretend a protocol invocation is received over multiplayer. Note the protocol must be a number.
 ---@param self table reference to the module
----@param commandCategory number protocol number
+---@param protocol number protocol number
 ---@param player number the player that sent the invocation
 ---@param time number use 0 for immediate execution instead of lockstep (game time)
 ---@param parameterBytes table table of bytes that represent the parameters to the protocol invocation
@@ -154,7 +155,7 @@ local setupInvocationParameters = require("helpers.setupInvocationParameters").s
 local checkIllegalInvocationNesting = require("helpers.checkIllegalInvocationNesting").checkIllegalInvocationNesting
 local _queueCommand = interface._queueCommand
 
----Invoke original protocol
+---Invoke original protocol. Note that the protocol must be a number.
 ---@param self table reference to this module
 ---@param protocol number protocol number
 ---@param ... number|table a number or table with numbers acting as the parameters to the invocation
@@ -173,8 +174,8 @@ end
 local FIRST_AVAILABLE_NUMBER = globals.FIRST_AVAILABLE_NUMBER
 local CUSTOM_PROTOCOL_NUMBER1 = globals.CUSTOM_PROTOCOL_NUMBER1
 
----Invoke custom protocol by name or number
----Arguments for the protocol are to be set up during the call to schedule
+---Invoke custom protocol by name (or number).
+---Arguments for the protocol are to be set up during the call to 'schedule'
 ---@param self table reference to the module
 ---@param protocol number|string name or number of the protocol
 ---@param context table a table representing the invocation context, passed unto schedule()
@@ -216,7 +217,8 @@ end
 
 local LAST_ORIGINAL_NUMBER = globals.LAST_ORIGINAL_NUMBER
 
----Invoke protocol by number or key
+---Invoke protocol by name. Note it is possible to invoke by number but this
+---is only for advanced use or when invoking an original protocol from the game.
 ---@param self table reference to this module
 ---@param protocol number|string name or number of the protocol
 ---@param ... number|table a number or table with numbers acting as the parameters to the invocation
