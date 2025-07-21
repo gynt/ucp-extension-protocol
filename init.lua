@@ -3,6 +3,7 @@ local globals = require("globals")
 local common = require("protocols.common")
 local interface = require("game.interface")
 
+local gameVersion = require("game.version")
 
 local PROTOCOL_REGISTRY = globals.PROTOCOL_REGISTRY
 
@@ -10,6 +11,10 @@ local namespace = {
   enable = function(self, config)
 
     require("game.hooks").setHooks()
+
+    hooks.registerHookCallback("afterInit", functino()
+      gameVersion.setMultiplayerGameVersion()
+    end)
 
     -- require("tests")
   end,
