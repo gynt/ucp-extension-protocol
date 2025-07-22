@@ -7,7 +7,7 @@ local gameVersion = require("game.version")
 
 local PROTOCOL_REGISTRY = globals.PROTOCOL_REGISTRY
 
----@module "protocol"
+---@class protocol
 local namespace = {
   enable = function(self, config)
 
@@ -43,14 +43,14 @@ local knownProtocolTypes = require("game.knownProtocolTypes")
 
 ---Register a custom protocol. Note that an IMMEDIATE protocol (used to communicate information and events outside
 ---of the simulation) can only invoke another IMMEDIATE protocol, but never a LOCKSTEP protocol.
----@param self table reference to this module
 ---@param extension string name of the extension
 ---@param name string name of the protocol
 ---@param type string "IMMEDIATE" or "LOCKSTEP"
 ---@param parameterSize number total size of the parameters in serialized form
----@param handler Handler handler of this protocol, table with function schedule, scheduleAfterReceive, and execute
----@return nil
-function namespace.registerCustomProtocol(self, extension, name, type, parameterSize, handler)
+---@param handler Handler handler of this protocol, table with function schedule, scheduleAfterReceive, and execute.
+---@see Handler
+---@return number protocol_number the number of the newly registered protocol
+function namespace:registerCustomProtocol(extension, name, type, parameterSize, handler)
   -- TODO: insert check for known registerProtocol numbers
   -- TODO: insert check for too large parameter size?
 
@@ -92,10 +92,9 @@ function namespace.registerCustomProtocol(self, extension, name, type, parameter
 end
 
 ---Get the protocol number
----@param self table reference to this module
 ---@param key string key of the protocol
 ---@return nil
-function namespace.getProtocolNumberByKey(self, key)
+function namespace:getProtocolNumberByKey(key)
   
   local KNOWN_REGISTRY_ENTRIES = globals.KNOWN_REGISTRY_ENTRIES
 
@@ -107,11 +106,10 @@ function namespace.getProtocolNumberByKey(self, key)
 end
 
 ---Get the protocol number
----@param self table reference to this module
 ---@param extension string name of the extension
 ---@param name string name of the protocol
 ---@return nil
-function namespace.getProtocolNumber(self, extension, name)
+function namespace:getProtocolNumber(extension, name)
   
   local KNOWN_REGISTRY_ENTRIES = globals.KNOWN_REGISTRY_ENTRIES
 
@@ -131,13 +129,12 @@ local MULTIPLAYER_HANDLER_ADDRESS = common.MULTIPLAYER_HANDLER_ADDRESS
 local _scheduleCommand = interface._scheduleCommand
 
 ---Pretend a protocol invocation is received over multiplayer. Note the protocol must be a number.
----@param self table reference to the module
 ---@param protocol number protocol number
 ---@param player number the player that sent the invocation
 ---@param time number use 0 for immediate execution instead of lockstep (game time)
 ---@param parameterBytes table table of bytes that represent the parameters to the protocol invocation
 ---@return nil
-function namespace.injectProtocol(self, protocol, player, time, parameterBytes)
+function namespace:injectProtocol(protocol, player, time, parameterBytes)
   if #parameterBytes > globals.MAX_PARAMETER_LENGTH then 
     error("parameter bytes is too long")
   else
@@ -157,11 +154,10 @@ local checkIllegalInvocationNesting = require("helpers.checkIllegalInvocationNes
 local _queueCommand = interface._queueCommand
 
 ---Invoke original protocol. Note that the protocol must be a number.
----@param self table reference to this module
 ---@param protocol number protocol number
 ---@param ... number|table a number or table with numbers acting as the parameters to the invocation
 ---@return nil
-function namespace.invokeOriginalProtocol(self, protocol, ...) 
+function namespace:invokeOriginalProtocol(protocol, ...) 
   if protocol < 0 or protocol > CUSTOM_PROTOCOL_NUMBER2 then
     error("Illegal protocol number: " .. tostring(protocol))
   end
@@ -177,11 +173,10 @@ local CUSTOM_PROTOCOL_NUMBER1 = globals.CUSTOM_PROTOCOL_NUMBER1
 
 ---Invoke custom protocol by name (or number).
 ---Arguments for the protocol are to be set up during the call to 'schedule'
----@param self table reference to the module
 ---@param protocol number|string name or number of the protocol
 ---@param context table a table representing the invocation context, passed unto schedule()
 ---@return nil
-function namespace.invokeCustomProtocol(self, protocol, context)
+function namespace:invokeCustomProtocol(protocol, context)
   local protocolNumber = argToProtocolNumber(protocol)
 
   if protocolNumber < FIRST_AVAILABLE_NUMBER then
@@ -220,13 +215,12 @@ local LAST_ORIGINAL_NUMBER = globals.LAST_ORIGINAL_NUMBER
 
 ---Invoke protocol by name. Note it is possible to invoke by number but this
 ---is only for advanced use or when invoking an original protocol from the game.
----@param self table reference to this module
 ---@param protocol number|string name or number of the protocol
 ---@param ... number|table a number or table with numbers acting as the parameters to the invocation
 ---in case of an original protocol. For custom protocols, a table representing the invocation context
 ---passed unto schedule call
 ---@return nil
-function namespace.invokeProtocol(self, protocol, ...)
+function namespace:invokeProtocol(protocol, ...)
   local protocolNumber = argToProtocolNumber(protocol)
 
   if protocolNumber < 1 then

@@ -14,3 +14,9 @@ This is the generated documentation for this extension.
    :caption: Contents:
    
    protocol
+   
+   commandmetainformation
+   context
+   handler
+   parameterserialisationhelper
+   

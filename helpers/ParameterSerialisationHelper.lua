@@ -1,11 +1,13 @@
 
 ---Helper for serializing and deserializing invocation parameters
 ---@class ParameterSerialisationHelper
+---@field public address number
+---@field public offsetAddress number
 local ParameterSerialisationHelper = {}
 
 -- First parameter should be a table with address: o
 function ParameterSerialisationHelper:new(o)
-  o = o or {
+  local o = o or {
     address = nil,
     offsetAddress = nil,
   }

@@ -1,5 +1,6 @@
-Protocol
+Interface
 -----------
 
 
-.. lua:automodule:: "protocol"
+.. lua:autoclass:: protocol
+

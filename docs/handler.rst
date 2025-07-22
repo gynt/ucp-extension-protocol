@@ -1,0 +1,4 @@
+Handler
+=========
+
+.. lua:autoclass:: Handler

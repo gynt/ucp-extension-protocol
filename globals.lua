@@ -17,8 +17,7 @@ local CONTEXT = {
 ---@field public parameters ParameterSerialisationHelper helper to (de)serialize parameters
 local CommandMetaInformation = {}
 
----Note that only an Immediate protocol can invoke another
----Immediate protocol.
+---Note that only an Immediate protocol can invoke another Immediate protocol.
 ---A Handler that is handling a Lockstep protocol
 ---can never invoke an Immediate protocol, because the
 ---ID of the currently processed invocation will be messed up
@@ -26,10 +25,21 @@ local CommandMetaInformation = {}
 ---repeatedly. Similarly, an Immediate protocol can never invoke
 ---a Lockstep protocol because the Lockstep protocol will never scheduled
 ---@class Handler
----@field public schedule fun(self: Handler, meta: CommandMetaInformation, context: Context):void
----@field public scheduleAfterReceive fun(self: Handler, meta: CommandMetaInformation):void
----@field public execute fun(self: Handler, meta: CommandMetaInformation):void
+---@see CommandMetaInformation
 local Handler = {}
+
+---@param meta CommandMetaInformation
+---@param context Context
+---@return void
+function Handler:schedule(meta, context) end
+
+---@param meta CommandMetaInformation
+---@return void
+function Handler:scheduleAfterReceive(meta) end
+
+---@param meta CommandMetaInformation
+---@return void
+function Handler:execute(meta) end
 
 ---@alias HandlerCallback fun(self: Handler, meta: CommandMetaInformation):void
 
@@ -114,4 +124,5 @@ return {
   INVOCATION_LOCK = INVOCATION_LOCK,
   MAX_PARAMETER_LENGTH = MAX_PARAMETER_LENGTH,
   CONTEXT = CONTEXT,
+  CommandMetaInformation = CommandMetaInformation,
 }

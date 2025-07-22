@@ -1,0 +1,4 @@
+CommandMetaInformation
+===========================
+
+.. lua:autoclass:: CommandMetaInformation
