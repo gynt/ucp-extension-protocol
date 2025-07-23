@@ -10,7 +10,7 @@ local argArrayMemoryMapping = {
 }
 
 ---Write parameters to memory
----@param ... the parameters to write, can be tables and loose integers
+---@param ... table|integer the parameters to write, can be tables and loose integers
 ---@return nil
 local function setupInvocationParameters(...)
   local args = table.pack(...)

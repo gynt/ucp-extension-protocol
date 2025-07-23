@@ -1,5 +1,8 @@
 
 local globals = require("globals")
+local FIRST_AVAILABLE_NUMBER = globals.FIRST_AVAILABLE_NUMBER
+local CUSTOM_PROTOCOL_NUMBER1 = globals.CUSTOM_PROTOCOL_NUMBER1
+
 local common = require("protocols.common")
 local interface = require("game.interface")
 
@@ -27,16 +30,16 @@ local namespace = {
 
 ---Helper function to process a protocol value that is either a number or a key
 ---@param p string|number the protocol
----@return number the protocol number
+---@return number protocol the protocol number
 local function argToProtocolNumber(p)
-  local protocolNumber = p
   if type(p) ~= "number" then
-    protocolNumber = namespace:getProtocolNumberByKey(p)
+    local protocolNumber = namespace:getProtocolNumberByKey(p)
     if protocolNumber == nil then
       error(string.format("Cannot find a protocol associated with identifier: %s", tostring(p)))
     end
+    return protocolNumber
   end
-  return protocolNumber
+  return p
 end
 
 local knownProtocolTypes = require("game.knownProtocolTypes")
@@ -49,7 +52,8 @@ local knownProtocolTypes = require("game.knownProtocolTypes")
 ---@param parameterSize number total size of the parameters in serialized form
 ---@param handler Handler handler of this protocol, table with function schedule, scheduleAfterReceive, and execute.
 ---@see Handler
----@return number protocol_number the number of the newly registered protocol
+---@return integer number
+---@return string key
 function namespace:registerCustomProtocol(extension, name, type, parameterSize, handler)
   -- TODO: insert check for known registerProtocol numbers
   -- TODO: insert check for too large parameter size?
@@ -88,12 +92,12 @@ function namespace:registerCustomProtocol(extension, name, type, parameterSize, 
 
   knownProtocolTypes[number] = type
 
-  return number
+  return number, name
 end
 
 ---Get the protocol number
 ---@param key string key of the protocol
----@return nil
+---@return number|nil number
 function namespace:getProtocolNumberByKey(key)
   
   local KNOWN_REGISTRY_ENTRIES = globals.KNOWN_REGISTRY_ENTRIES
@@ -108,7 +112,7 @@ end
 ---Get the protocol number
 ---@param extension string name of the extension
 ---@param name string name of the protocol
----@return nil
+---@return nil|number number
 function namespace:getProtocolNumber(extension, name)
   
   local KNOWN_REGISTRY_ENTRIES = globals.KNOWN_REGISTRY_ENTRIES
@@ -129,12 +133,22 @@ local MULTIPLAYER_HANDLER_ADDRESS = common.MULTIPLAYER_HANDLER_ADDRESS
 local _scheduleCommand = interface._scheduleCommand
 
 ---Pretend a protocol invocation is received over multiplayer. Note the protocol must be a number.
----@param protocol number protocol number
+---@param protocol number|string protocol number or key
 ---@param player number the player that sent the invocation
 ---@param time number use 0 for immediate execution instead of lockstep (game time)
 ---@param parameterBytes table table of bytes that represent the parameters to the protocol invocation
 ---@return nil
 function namespace:injectProtocol(protocol, player, time, parameterBytes)
+  local protocolNumber = argToProtocolNumber(protocol)
+
+  if protocolNumber < FIRST_AVAILABLE_NUMBER then
+    error(string.format("Illegal custom protocol number: %s", protocolNumber))
+  end
+
+  if PROTOCOL_REGISTRY[protocolNumber] == nil then 
+    error("Unknown custom protocol: " .. tostring(protocolNumber)) 
+  end
+
   if #parameterBytes > globals.MAX_PARAMETER_LENGTH then 
     error("parameter bytes is too long")
   else
@@ -142,10 +156,10 @@ function namespace:injectProtocol(protocol, player, time, parameterBytes)
   end
 
   
-  if protocol < 0 or protocol > CUSTOM_PROTOCOL_NUMBER2 then
+  if protocolNumber < 0 or protocolNumber > CUSTOM_PROTOCOL_NUMBER2 then
     error("Illegal command category: " .. tostring(protocol))
   end
-  _scheduleCommand(MULTIPLAYER_HANDLER_ADDRESS, protocol, player, time, COMMAND_FIXED_RECEIVED_PARAMETER_LOCATION_ADDRESS)
+  _scheduleCommand(MULTIPLAYER_HANDLER_ADDRESS, protocolNumber, player, time, COMMAND_FIXED_RECEIVED_PARAMETER_LOCATION_ADDRESS)
 end
 
 local setupInvocationParameters = require("helpers.setupInvocationParameters").setupInvocationParameters
@@ -154,26 +168,34 @@ local checkIllegalInvocationNesting = require("helpers.checkIllegalInvocationNes
 local _queueCommand = interface._queueCommand
 
 ---Invoke original protocol. Note that the protocol must be a number.
----@param protocol number protocol number
+---@param protocol number|string protocol number or key
 ---@param ... number|table a number or table with numbers acting as the parameters to the invocation
 ---@return nil
 function namespace:invokeOriginalProtocol(protocol, ...) 
-  if protocol < 0 or protocol > CUSTOM_PROTOCOL_NUMBER2 then
+  local protocolNumber = argToProtocolNumber(protocol)
+
+  if protocolNumber < FIRST_AVAILABLE_NUMBER then
+    error(string.format("Illegal custom protocol number: %s", protocolNumber))
+  end
+
+  if PROTOCOL_REGISTRY[protocolNumber] == nil then 
+    error("Unknown custom protocol: " .. tostring(protocolNumber)) 
+  end
+
+  if protocolNumber < 0 or protocolNumber > CUSTOM_PROTOCOL_NUMBER2 then
     error("Illegal protocol number: " .. tostring(protocol))
   end
 
-  checkIllegalInvocationNesting(protocol)
+  checkIllegalInvocationNesting(protocolNumber)
 
   setupInvocationParameters(...)
-  _queueCommand(MULTIPLAYER_HANDLER_ADDRESS, protocol)
+  _queueCommand(MULTIPLAYER_HANDLER_ADDRESS, protocolNumber)
 end
 
-local FIRST_AVAILABLE_NUMBER = globals.FIRST_AVAILABLE_NUMBER
-local CUSTOM_PROTOCOL_NUMBER1 = globals.CUSTOM_PROTOCOL_NUMBER1
 
----Invoke custom protocol by name (or number).
+---Invoke custom protocol by key (or number).
 ---Arguments for the protocol are to be set up during the call to 'schedule'
----@param protocol number|string name or number of the protocol
+---@param protocol number|string key or number of the protocol
 ---@param context table a table representing the invocation context, passed unto schedule()
 ---@return nil
 function namespace:invokeCustomProtocol(protocol, context)
@@ -213,9 +235,9 @@ end
 
 local LAST_ORIGINAL_NUMBER = globals.LAST_ORIGINAL_NUMBER
 
----Invoke protocol by name. Note it is possible to invoke by number but this
+---Invoke protocol by key. Note it is possible to invoke by number but this
 ---is only for advanced use or when invoking an original protocol from the game.
----@param protocol number|string name or number of the protocol
+---@param protocol number|string key or number of the protocol
 ---@param ... number|table a number or table with numbers acting as the parameters to the invocation
 ---in case of an original protocol. For custom protocols, a table representing the invocation context
 ---passed unto schedule call
