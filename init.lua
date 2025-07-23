@@ -140,11 +140,7 @@ local _scheduleCommand = interface._scheduleCommand
 ---@return nil
 function namespace:injectProtocol(protocol, player, time, parameterBytes)
   local protocolNumber = argToProtocolNumber(protocol)
-
-  if protocolNumber < FIRST_AVAILABLE_NUMBER then
-    error(string.format("Illegal custom protocol number: %s", protocolNumber))
-  end
-
+  
   if PROTOCOL_REGISTRY[protocolNumber] == nil then 
     error("Unknown custom protocol: " .. tostring(protocolNumber)) 
   end
@@ -174,12 +170,8 @@ local _queueCommand = interface._queueCommand
 function namespace:invokeOriginalProtocol(protocol, ...) 
   local protocolNumber = argToProtocolNumber(protocol)
 
-  if protocolNumber < FIRST_AVAILABLE_NUMBER then
-    error(string.format("Illegal custom protocol number: %s", protocolNumber))
-  end
-
-  if PROTOCOL_REGISTRY[protocolNumber] == nil then 
-    error("Unknown custom protocol: " .. tostring(protocolNumber)) 
+  if protocolNumber >= FIRST_AVAILABLE_NUMBER then
+    error(string.format("Illegal original protocol number: %s", protocolNumber))
   end
 
   if protocolNumber < 0 or protocolNumber > CUSTOM_PROTOCOL_NUMBER2 then
