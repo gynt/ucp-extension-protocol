@@ -32,7 +32,8 @@ local getCommandOffset = function(commandID)
   return COMMAND_ARRAY_ADDRESS + (commandID * TOTAL_GAME_COMMAND_SIZE)
 end
 
-
+local _, pGameCore = utils.AOBExtract("A3 I( ? ? ? ? ) 89 5C 24 1C")
+local MAP_TIME_ADDRESS = pGameCore + 0x98
 
 
 
@@ -77,4 +78,5 @@ return {
   setCommandParameterSize = setCommandParameterSize,
   COMMAND_FIXED_PARAMETER_LOCATION_ADDRESS = COMMAND_FIXED_PARAMETER_LOCATION_ADDRESS,
   COMMAND_FIXED_RECEIVED_PARAMETER_LOCATION_ADDRESS = COMMAND_FIXED_RECEIVED_PARAMETER_LOCATION_ADDRESS,
+  MAP_TIME_ADDRESS = MAP_TIME_ADDRESS,
 }

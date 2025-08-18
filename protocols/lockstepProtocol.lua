@@ -25,7 +25,7 @@ local function onProcessCommand122()
     log(DEBUG, "get command meta information")
     local meta = getCommandMetaInformation(id)
 
-    log(VERBOSE, string.format("scheduled for time: %s", meta.time))
+    log(VERBOSE, string.format("scheduled for time: %s (current time is: %s)", meta.time, core.readInteger(common.MAP_TIME_ADDRESS)))
 
     log(DEBUG, "create ParameterSerialisationHelper")
     local psh = ParameterSerialisationHelper:new({address = meta.parametersAddress, offsetAddress = COMMAND_PARAMETER_OFFSET_ADDRESS})
