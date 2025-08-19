@@ -1,7 +1,10 @@
 local PROTOCOL_REGISTRY = require("globals").PROTOCOL_REGISTRY
 
+local pGameVersionLocationInstruction = core.AOBScan("C7 ? ? ? ? ? ? ? ? ? E8 ? ? ? ? C7 ? ? ? ? ? ? ? ? ? C3 85 C0")
+local pGameVersion = pGameVersionLocationInstruction + 6
+
 local function writeMultiplayerGameVersion(version)
-    error("not yet implemented")
+  core.writeCodeInteger(pGameVersion, version)
 end
 
 local function hashProtocols()
