@@ -12,9 +12,11 @@ local COMMAND_PARAM_0_ADDRESS = common.COMMAND_PARAM_0_ADDRESS
 local getCommandMetaInformation = common.getCommandMetaInformation
 local setCommandParameterSize = common.setCommandParameterSize
 local COMMAND_PARAMETER_OFFSET_ADDRESS = common.COMMAND_PARAMETER_OFFSET_ADDRESS
+local COMMAND_FIXED_RECEIVED_PARAMETER_LOCATION_ADDRESS = common.COMMAND_FIXED_RECEIVED_PARAMETER_LOCATION_ADDRESS
 
 local ParameterSerialisationHelper = require("helpers.parameterSerialisationHelper")
 
+---TODO: there is a latent issue here which is whether it is always known which address the packet is at upon receive...
 -- LOCKSTEP commands
 local function onProcessCommand122()
   local state, err = pcall(function()
@@ -44,7 +46,8 @@ local function onProcessCommand122()
       subCommand = psh:deserializeInteger()
       -- psh = ParameterSerialisationHelper
     elseif plan == PlanEnum.SCHEDULE_AFTER_RECEIVE then
-      log(DEBUG, "deserialize integer from parameters")
+      log(DEBUG, "deserialize integer from parameters after receive")
+      psh = ParameterSerialisationHelper:new({address = COMMAND_FIXED_RECEIVED_PARAMETER_LOCATION_ADDRESS, offsetAddress = COMMAND_PARAMETER_OFFSET_ADDRESS})
       subCommand = psh:deserializeInteger()
       -- psh = ParameterSerialisationHelper
     end
