@@ -11,8 +11,10 @@ local function hashProtocols()
     local array = {}
     for number, protocol in pairs(PROTOCOL_REGISTRY) do
         local name = protocol.name
-        table.insert(array, {name = name, number = number,})
+        table.insert(array, {name, number})
     end
+    if #array == 0 then return nil end
+    table.sort(array, function(a, b) return a[1] < b[1] end)
     local message = yaml.dump(array)
     local hash = sha.sha1(message)
 
@@ -21,8 +23,12 @@ end
 
 local setMultiplayerGameVersion = function()
     local hash = hashProtocols()
-    log(VERBOSE, string.format("Setting game version to: %X", hash))
-    writeMultiplayerGameVersion(hash)
+    if hash ~= nil then
+      log(VERBOSE, string.format("Setting game version to: %X", hash))
+      writeMultiplayerGameVersion(hash)
+    else
+      log(VERBOSE, string.format("Leaving game version unchanged: %X", core.readInteger(pGameVersion)))
+    end
 end
 
 return {
